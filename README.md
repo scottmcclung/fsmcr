@@ -1,6 +1,7 @@
 # Finite State Machine
 
-The FSM (Finite State Machine) module provides a super simple implementation of a state machine in Crystal.
+The FSM (Finite State Machine) module provides a super simple implementation of a state machine in Crystal.  
+Define the possible states using an enum to ensure only valid states are used.
 
 ## Installation
 
@@ -25,31 +26,37 @@ The FSM (Finite State Machine) module provides a super simple implementation of 
    ```crystal
    require "fsm"
 
-   machine = FSM::Machine.new
+   enum Stage
+      Start
+      Middle
+      End
+   end
+
+   machine = FSM::Machine(Stage).new
    ```
 
 2. Configure possible states and transitions using the `add_transitions` method:
 
    ```crystal
-   machine.add_transitions("Start", [
-     FSM::Transition.new(event: "Trigger", to: "Middle"),
-     FSM::Transition.new(event: "Reset", to: "Start")
+   machine.add_transitions(Stage::Start, [
+     FSM::Transition.new(event: "Trigger", to: Stage::Middle),
+     FSM::Transition.new(event: "Reset", to: Stage::Start)
    ])
 
-   machine.add_transitions("Middle", [
-     FSM::Transition.new(event: "Complete", to: "End"),
-     FSM::Transition.new(event: "Reset", to: "Start")
+   machine.add_transitions(Stage::Middle, [
+     FSM::Transition.new(event: "Complete", to: Stage::End),
+     FSM::Transition.new(event: "Reset", to: Stage::Start)
    ])
    ```
 
 3. Perform state transitions based on events using the `transition` method:
 
    ```crystal
-   current_state = "Start"
+   current_state = Stage::Start
 
-   current_state = machine.transition(current_state, "Trigger") # => "Middle"
-   current_state = machine.transition(current_state, "Other") # => "Middle"  # Event not recognized by the "Middle" state so current_state stays "Middle"
-   current_state = machine.transition(current_state, "Complete") # => "End"
+   current_state = machine.transition(current_state, "Trigger") # => Stage::Middle
+   current_state = machine.transition(current_state, "Other") # => Stage::Middle  # Event not recognized by the "Middle" state so current_state stays "Middle"
+   current_state = machine.transition(current_state, "Complete") # => Stage::End
    ```
 
 
