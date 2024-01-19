@@ -6,13 +6,13 @@ describe FSM::Machine do
 
     # Configure possible states and transitions
     state_machine.add_transitions(Stage::Start, [
-      FSM::Transition(Stage).new(event: "Trigger", to: Stage::Middle),
-      FSM::Transition(Stage).new(event: "Reset", to: Stage::Start),
+      FSM::Transition.new(event: "Trigger", to: Stage::Middle),
+      FSM::Transition.new(event: "Reset", to: Stage::Start),
     ])
 
     state_machine.add_transitions(Stage::Middle, [
-      FSM::Transition(Stage).new(event: "Complete", to: Stage::End),
-      FSM::Transition(Stage).new(event: "Reset", to: Stage::Start),
+      FSM::Transition.new(event: "Complete", to: Stage::End),
+      FSM::Transition.new(event: "Reset", to: Stage::Start),
     ])
 
     # Initial state

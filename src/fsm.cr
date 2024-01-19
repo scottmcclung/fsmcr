@@ -12,7 +12,7 @@ module FSM
   end
 
   # Define the Machine class
-  class Machine(T)
+  struct Machine(T)
     # Initialize a Hash to store state transitions
     property transitions : Hash(T, Array(Transition(T))) = {} of T => Array(Transition(T))
 

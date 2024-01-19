@@ -1,7 +1,6 @@
 # Finite State Machine
 
-The FSM (Finite State Machine) module provides a super simple implementation of a state machine in Crystal.  
-Define the possible states using an enum to ensure only valid states are used.
+The FSM (Finite State Machine) module provides a super simple implementation of a state machine in Crystal.  Define the possible states using an enum to ensure only valid states are used.
 
 ## Installation
 
@@ -54,8 +53,8 @@ Define the possible states using an enum to ensure only valid states are used.
    ```crystal
    current_state = Stage::Start
 
-   current_state = machine.transition(current_state, "Trigger") # => Stage::Middle
-   current_state = machine.transition(current_state, "Other") # => Stage::Middle  # Event not recognized by the "Middle" state so current_state stays "Middle"
+   current_state = machine.transition(current_state, "Trigger")  # => Stage::Middle
+   current_state = machine.transition(current_state, "Other")    # => Stage::Middle  # Event not recognized by the "Middle" state so current_state stays "Middle"
    current_state = machine.transition(current_state, "Complete") # => Stage::End
    ```
 
