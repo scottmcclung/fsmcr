@@ -1,6 +1,13 @@
 # Finite State Machine
 
-The FSM (Finite State Machine) module provides a super simple implementation of a state machine in Crystal.  Define the possible states using an enum to ensure only valid states are used.
+This repository contains a Crystal module for creating and managing Finite State Machines (FSMs). It is designed to model complex stateful systems, allowing for easy definition and management of states, transitions, and context data.
+
+## Features
+
+- **State Management**: Define and manage various states in your system.
+- **Transitions**: Easily configure transitions between states triggered by events.
+- **Contextual Data**: Carry and manage contextual data across state transitions.
+- **Callback Support**: Utilize entry and exit actions for states and custom actions for transitions.
 
 ## Installation
 
@@ -12,51 +19,84 @@ The FSM (Finite State Machine) module provides a super simple implementation of 
        github: scottmcclung/fsmcr
    ```
 
-2. Navigate to the project directory:
+2. Include the module in your project:
 
-   ```bash
-   cd fsmcr
+   ```crystal
+   require "fsm"
    ```
 
 ## Usage
 
-1. Include the `FSM` module and create an instance of the `Machine` class:
+### Defining States and Transitions
 
-   ```crystal
-   require "fsm"
+Create states and define transitions between them. Each state can have entry and exit actions, and each transition can have associated actions.
 
-   enum Stage
-      Start
-      Middle
-      End
-   end
+```crystal
+state1 = FSM::State.new("state1")
+state2 = FSM::State.new("state2")
 
-   machine = FSM::Machine(Stage).new
-   ```
+state1.on_event("event_to_state2", "state2") do |event, context|
+  # Transition action
+end
 
-2. Configure possible states and transitions using the `add_transitions` method:
+state2.on_entry do |event, context|
+  # Entry action for state2
+end
+```
 
-   ```crystal
-   machine.add_transitions(Stage::Start, [
-     FSM::Transition.new(event: "Trigger", to: Stage::Middle),
-     FSM::Transition.new(event: "Reset", to: Stage::Start)
-   ])
+### Creating a State Machine
 
-   machine.add_transitions(Stage::Middle, [
-     FSM::Transition.new(event: "Complete", to: Stage::End),
-     FSM::Transition.new(event: "Reset", to: Stage::Start)
-   ])
-   ```
+Instantiate the FSM with the defined states and transitions.
 
-3. Perform state transitions based on events using the `transition` method:
+```crystal
+states = [state1, state2]
+initial_state = "state1"
+context_data = {"key1" => "value1", "key2" => "value2"}
 
-   ```crystal
-   current_state = Stage::Start
+machine = FSM::Machine.create("machine_id", states, initial_state, context_data)
+```
 
-   current_state = machine.transition(current_state, "Trigger")  # => Stage::Middle
-   current_state = machine.transition(current_state, "Other")    # => Stage::Middle  # Event not recognized by the "Middle" state so current_state stays "Middle"
-   current_state = machine.transition(current_state, "Complete") # => Stage::End
-   ```
+### Triggering Transitions
+
+Send events to the state machine to trigger state transitions.
+
+```crystal
+new_state = machine.send("event_to_state2")
+```
+
+### Callback Operations During State Transitions
+
+In the FSM, callbacks during a state transition occur in the following order:
+
+1. **Exit Actions**: Executed for the current state before the transition.
+2. **Transition Actions**: Performed during the transition, after exiting the current state.
+3. **Entry Actions**: Executed for the new state after the transition.
+
+```crystal
+# Define states with entry and exit actions
+state1 = FSM::State.new("state1")
+state1.on_exit do |event, context|
+  puts "Exiting state1"
+end
+
+state2 = FSM::State.new("state2")
+state2.on_entry do |event, context|
+  puts "Entering state2"
+end
+
+# Define transition with an action
+state1.on_event("event_to_state2", "state2") do |event, context|
+  puts "Transitioning from state1 to state2"
+end
+
+# Create and use the state machine
+machine = FSM::Machine.create("machine_id", [state1, state2], "state1")
+machine.send("event_to_state2")
+# Output:
+# Exiting state1
+# Transitioning from state1 to state2
+# Entering state2
+```
 
 
 ## Contributing
