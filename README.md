@@ -73,7 +73,7 @@ service = FSM::Service.interpret(machine, initial_state, context_data)
 
 ### Triggering Transitions
 
-Send events to the state machine to trigger state transitions.
+Send events to the interpreter to trigger state transitions.
 
 ```crystal
 new_state = service.send("event_to_state2")
