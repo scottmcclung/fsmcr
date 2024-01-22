@@ -61,7 +61,7 @@ states = [state1, state2, state3]
 initial_state = "state1"
 context_data = {"key1" => "value1", "key2" => "value2"}
 
-machine = FSM::Machine.create("machine_id", states, initial_state, context_data)
+machine = FSM::Machine.create("machine_id", states)
 ```
 
 The interpreter is responsible for interpreting the machine and parsing and executing it.  Instatiate the Interpreter to interact with the Machine.
