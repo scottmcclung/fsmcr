@@ -74,7 +74,7 @@ describe FSM::Service do
     machine = FSM::Machine.create("test_machine", states)
     service = FSM::Service.interpret(machine, "state1")
 
-    service.on_transition { |new_state| state_change_callback_called = true }
+    service.subscribe { |new_state| state_change_callback_called = true }
 
     service.send("event1")
 

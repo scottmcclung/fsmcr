@@ -6,7 +6,7 @@ module FSM
     @current_state : State
     @machine : Machine
 
-    @post_transition_callbacks : Nil | (State) ->
+    @subscription_callbacks : Nil | (State) ->
 
     # Mutex to synchronize state transitions
     @transition_mutex : Mutex = Mutex.new
@@ -36,16 +36,16 @@ module FSM
     # Register a callback to be executed when the state of the machine changes.
     #
     # @yieldparam state [State] The new state after the change.
-    def on_transition(&block : (State) ->) : self
-      @post_transition_callbacks = block
+    def subscribe(&block : (State) ->) : self
+      @subscription_callbacks = block
       self
     end
 
     # Run the state change callback with the given state.
     #
     # @param state [State] The new state after the change.
-    private def run_post_transition_callbacks(state)
-      @post_transition_callbacks.try &.call(state)
+    private def run_subscription_callbacks(state)
+      @subscription_callbacks.try &.call(state)
     end
 
     # Send an event to trigger a state transition.
@@ -70,7 +70,7 @@ module FSM
         @current_state = new_state
 
         # Run the callback for state changes
-        self.run_post_transition_callbacks(@current_state)
+        self.run_subscription_callbacks(@current_state)
 
         @current_state
       end

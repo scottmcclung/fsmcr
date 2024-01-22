@@ -58,15 +58,14 @@ Instantiate the Machine with the defined states and transitions.
 
 ```crystal
 states = [state1, state2, state3]
-initial_state = "state1"
-context_data = {"key1" => "value1", "key2" => "value2"}
-
 machine = FSM::Machine.create("machine_id", states)
 ```
 
 The interpreter is responsible for interpreting the machine and parsing and executing it.  Instatiate the Interpreter to interact with the Machine.
 
 ```crystal
+initial_state = "state1"
+context_data = {"key1" => "value1", "key2" => "value2"}
 service = FSM::Service.interpret(machine, initial_state, context_data)
 ```
 
@@ -78,6 +77,19 @@ Send events to the interpreter to trigger state transitions.
 ```crystal
 new_state = service.send("event_to_state2")
 ```
+
+
+
+### Subscribing to results of Transitions
+
+Provide a callback that receives the new state when a transition completes.
+
+```crystal
+service.subscribe do |state|
+  # Do something with the new state
+end
+```
+
 
 ### Callback Operations During State Transitions
 

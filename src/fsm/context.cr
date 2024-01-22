@@ -1,16 +1,20 @@
 module FSM
   # Represents the "extended" context associated with the finite state machine.
   class Context
-    # Mutex for thread safety
+    # Mutex for concurrency
     @mutex : Mutex = Mutex.new
 
     # Internal data storage
     @data : Hash(String, Any) = {} of String => Any
 
+    def data
+      @data.clone
+    end
+
     # Create a new context with optional initial data.
     #
     # @param initial_data [Hash(String, Any)] Optional initial data to be registered in the context.
-    def initialize(initial_data = {} of String => Any)
+    protected def initialize(initial_data = {} of String => Any)
       @data.merge!(initial_data) if initial_data
     end
 
@@ -19,7 +23,7 @@ module FSM
     # @param key [String] The key to retrieve.
     # @return [Any] The value associated with the key.
     def get(key : String) : Any
-      @mutex.synchronize { @data[key] }
+      @mutex.synchronize { @data[key]? }
     end
 
     # Set the value associated with a key in the context.
@@ -37,7 +41,7 @@ module FSM
     # @return [Any] The modified value.
     def modify(key : String, &block : (Any) -> Any)
       @mutex.synchronize do
-        current_value = @data[key]
+        current_value = @data[key]?
         modified_value = block.call(current_value)
         @data[key] = modified_value
         modified_value
