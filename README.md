@@ -54,22 +54,29 @@ end
 
 ### Creating a State Machine
 
-Instantiate the FSM with the defined states and transitions.
+Instantiate the Machine with the defined states and transitions.
 
 ```crystal
-states = [state1, state2]
+states = [state1, state2, state3]
 initial_state = "state1"
 context_data = {"key1" => "value1", "key2" => "value2"}
 
 machine = FSM::Machine.create("machine_id", states, initial_state, context_data)
 ```
 
+The interpreter is responsible for interpreting the machine and parsing and executing it.  Instatiate the Interpreter to interact with the Machine.
+
+```crystal
+service = FSM::Service.interpret(machine, initial_state, context_data)
+```
+
+
 ### Triggering Transitions
 
 Send events to the state machine to trigger state transitions.
 
 ```crystal
-new_state = machine.send("event_to_state2")
+new_state = service.send("event_to_state2")
 ```
 
 ### Callback Operations During State Transitions
