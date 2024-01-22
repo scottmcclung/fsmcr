@@ -34,13 +34,21 @@ Create states and define transitions between them. Each state can have entry and
 ```crystal
 state1 = FSM::State.new("state1")
 state2 = FSM::State.new("state2")
+state3 = FSM::State.new("state3")
 
-state1.on_event("event_to_state2", "state2") do |event, context|
-  # Transition action
+state1.on_event("event_to_state2", "state2") # Registers standard transition that responds to "event_to_state2" and transitions to state2
+
+state2.on_event("event_to_state3", "state3") do |transition|
+  transition.on {|event, context| # Transition callback. } # Registers a callback to be executed when the transition happens
+  transition.guard {|event, context| # Condition to determine if the transition should be allowed. } 
 end
 
-state2.on_entry do |event, context|
-  # Entry action for state2
+state3.on_entry do |event, context|
+  # Code here is executed when entering state3
+end
+
+state3.on_exit do |event, context|
+  # Code here is executed when exiting state3
 end
 ```
 
@@ -75,23 +83,24 @@ In the FSM, callbacks during a state transition occur in the following order:
 ```crystal
 # Define states with entry and exit actions
 state1 = FSM::State.new("state1")
-state1.on_exit do |event, context|
-  puts "Exiting state1"
-end
+  .on_exit do |event, context|
+    puts "Exiting state1"
+  end
 
 state2 = FSM::State.new("state2")
-state2.on_entry do |event, context|
-  puts "Entering state2"
-end
+  .on_entry do |event, context|
+    puts "Entering state2"
+  end
 
 # Define transition with an action
-state1.on_event("event_to_state2", "state2") do |event, context|
-  puts "Transitioning from state1 to state2"
+state1.on_event("event_to_state2", "state2") do |transition|
+  transition.on { |event, context| puts "Transitioning from state1 to state2" }
 end
 
 # Create and use the state machine
-machine = FSM::Machine.create("machine_id", [state1, state2], "state1")
-machine.send("event_to_state2")
+machine = FSM::Machine.create("machine_id", [state1, state2])
+service = FSM::Service.interpret(machine, "state1")
+service.send("event_to_state2")
 # Output:
 # Exiting state1
 # Transitioning from state1 to state2
