@@ -83,9 +83,9 @@ new_state = service.send("event_to_state2")
 
 In the FSM, callbacks during a state transition occur in the following order:
 
-1. **Exit Actions**: Executed for the current state before the transition.
-2. **Transition Actions**: Performed during the transition, after exiting the current state.
-3. **Entry Actions**: Executed for the new state after the transition.
+1. **Exit Callback**: Executed for the current state before the transition.
+2. **Transition Callback**: Performed during the transition, after exiting the current state.
+3. **Entry Callback**: Executed for the new state after the transition.
 
 ```crystal
 # Define states with entry and exit actions
