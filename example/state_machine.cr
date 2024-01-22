@@ -1,51 +1,67 @@
 require "../src/fsm"
 
-enum Stage
-  Start
-  Middle
-  End
-end
+id = "something from here"
+current = "some state"
 
-class StateMachine
-  @machine : FSM::Machine(Stage)
-  getter current_state : Stage
+states = [
+  FSM::State.create("red")
+    .on_event("change", target: "green") do |transition|
+      transition.on { |e, c| p "Transition: Red -> Green" }
+      transition.guard { |event, context| true }
+    end
+    .on_event("error", target: "error")
+    .on_entry { |e, c| p "Entry: red" }
+    .on_exit { |e, c| p "Exit: red" },
 
-  def initialize
-    # Set the initial state
-    @current_state = Stage::Start
+  FSM::State.create("yellow")
+    .on_event("change", target: "red") do |transition|
+      transition.on { |event, context| p "Transition: Yellow -> Red" }
+      transition.guard { |event, context| true }
+    end
+    .on_event("error", target: "error")
+    .on_entry { |e, c| p "Entry: yellow" }
+    .on_exit { |e, c| p "Exit: yellow" },
 
-    # Create an instance of the FSM::Machine
-    @machine = FSM::Machine(Stage).new
+  FSM::State.create("green")
+    .on_event("change", target: "yellow") do |transition|
+      transition.on { |event, context| p "Transition: Green -> Yellow" }
+      transition.guard { |event, context| true }
+    end
+    .on_event("error", target: "error")
+    .on_entry { |e, c| p "Entry: green" }
+    .on_exit { |e, c| p "Exit: green" },
+]
 
-    # Register events that each state will respond to and the transitions
-    # they will make in response to each event
-    @machine.add_transitions(Stage::Start, [
-      FSM::Transition.new(event: "Trigger", to: Stage::Middle),
-      FSM::Transition.new(event: "Reset", to: Stage::Start),
-    ])
-
-    @machine.add_transitions(Stage::Middle, [
-      FSM::Transition.new(event: "Complete", to: Stage::End),
-      FSM::Transition.new(event: "Reset", to: Stage::Start),
-    ])
+state = FSM::State.create("error")
+  .on_event("reset", target: "red") do |transition|
+    transition.on { |event, context| p "Transition: Error -> Red" }
+    transition.guard { |event, context| true }
   end
+  .on_entry { |e, c| p "Entry: error mode" }
+  .on_exit { |e, c| p "Exit: error mode" }
 
-  def matches?(stage : Stage)
-    @current_state === stage
-  end
+states.push(state)
 
-  def send(event : String)
-    @current_state = @machine.transition(@current_state, event)
-  end
-end
+machine = FSM::Machine.create(id: "stop_light", states: states)
 
-# Trigger events
-state_machine = StateMachine.new
+# machine = FSM::Machine.create()
+service = FSM::Service.interpret(machine, initial_state: "red") # machine is struct
 
-p! state_machine.current_state           # => Stage::Start
-p! state_machine.send("Trigger")         # => Stage::Middle   # Transitions to Middle
-p! state_machine.send("InvalidEvent")    # => Stage::Middle   # The "InvalidEvent" message wasn't registered for the Middle state so no transition
-p! state_machine.matches?(Stage::Start)  # => false
-p! state_machine.matches?(Stage::Middle) # => true
-p! state_machine.send("Reset")           # => Stage::Start    # Transitions to Start
-p! state_machine.send("InvalidEvent")    # => Stage::Start    # The "InvalidEvent" message wasn't registered for the Start state so no transition
+# Can register new transition callbacks with the service, but the machine and the states are immutable.
+service.on_transition { |state| p "State changed to: #{state.id}" }
+service.send("event name")
+service.matches?("red") # => true
+service.current_state   # => "red"
+
+p service.current_state
+
+p service.send("change")
+# p! service.send("change")
+p service.send("error")
+p service.send("change") # invalid
+# p! service.send("reset")
+# p! service.send("change")
+# p! service.send("change")
+# p! service.send("error")
+# p! service.send("change")
+# p! service.send("reset")

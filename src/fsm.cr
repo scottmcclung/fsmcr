@@ -1,37 +1,19 @@
 require "./fsm/*"
 
+# The Finite State Machine (FSM) module provides a framework for modeling and implementing finite state machines.
+#
+# It includes classes for creating and managing state machines, states, transitions, and associated context.
+# States define the different conditions or modes that a system can be in, transitions define how the system moves
+# from one state to another in response to events, and a context is used to carry information across state transitions.
 # See examples directory for an example of how to leverage the FSM in your app
 module FSM
-  # Struct to represent a transition
-  struct Transition(T)
-    property event : String
-    property to : T
-
-    def initialize(@event : String, @to : T)
-    end
-  end
-
-  # Define the Machine class
-  struct Machine(T)
-    # Initialize a Hash to store state transitions
-    property transitions : Hash(T, Array(Transition(T))) = {} of T => Array(Transition(T))
-
-    # Add transitions for a specific state
-    def add_transitions(state : T, transitions : Array(Transition(T))) : self
-      @transitions[state] = transitions
-      self
-    end
-
-    # Define a method to perform a transition
-    def transition(current_state : T, event : String) : T
-      # No transition made if current state received is unrecognized.
-      return current_state unless transitions_for_state = @transitions[current_state]
-
-      # No transition made if the event received is not registered for the current_state
-      return current_state unless transition = transitions_for_state.find { |t| t.event == event }
-
-      # Transitions from current_state to transition.to
-      transition.to
-    end
-  end
+  alias Any = Nil |
+              Bool |
+              Int32 |
+              Int64 |
+              Float32 |
+              Float64 |
+              String |
+              Array(Any) |
+              Hash(String, Any)
 end
