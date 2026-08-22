@@ -1,4 +1,5 @@
 require "./spec_helper"
+require "wait_group"
 
 describe FSM::Service do
   it "transitions to the initial state on creation" do
@@ -244,20 +245,49 @@ describe FSM::Service do
       machine = FSM::Machine.create("test_machine", states)
       service = FSM::Service.interpret(machine, states.first.id)
 
-      threads = [] of Thread
-      100.times do |i|
-        threads << Thread.new do
-          current_state_index = i % 10
-          event_index = (i / 10) % 5
-          event = "event#{current_state_index}_to_#{(current_state_index + event_index + 1) % 10}"
+      # In a default (non -Dpreview_mt) build the scheduler runs one fiber at a
+      # time and only switches at an explicit suspend point (I/O, sleep, channel
+      # op, contended Mutex, Fiber.yield). Service#send has none of these, so
+      # each spawned fiber runs to completion before the next is dequeued. This
+      # verifies the spawn/WaitGroup fiber lifecycle and 100 sequential send
+      # calls completing without raising or hanging. Genuine parallel contention
+      # on the transition mutex would require a -Dpreview_mt build with multiple
+      # scheduler threads. Raw Thread.new is unsupported regardless because
+      # Crystal's Mutex is fiber-aware, not thread-aware: a raw OS thread that
+      # takes the contended lock path reads an unassigned Fiber scheduler and
+      # raises.
+      valid_state_ids : Set(String) = states.map(&.id).to_set
+
+      # Fiber#run logs unhandled fiber exceptions to stderr instead of
+      # propagating them to the spec runner, so a failing send would otherwise
+      # leave the spec green. Collect exceptions and assert on them directly.
+      # The mutex guards errors for a -Dpreview_mt build; in a default build the
+      # fibers do not interleave, so the append is already sequential.
+      errors : Array(Exception) = [] of Exception
+      error_mutex : Mutex = Mutex.new
+
+      fiber_count : Int32 = 100
+      wait_group : WaitGroup = WaitGroup.new(fiber_count)
+      fiber_count.times do |i|
+        spawn do
+          current_state_index : Int32 = i % 10
+          event_index : Int32 = (i // 10) % 5
+          event : String = "event#{current_state_index}_to_#{(current_state_index + event_index + 1) % 10}"
           service.send(event)
+        rescue ex
+          error_mutex.synchronize { errors << ex }
+        ensure
+          wait_group.done
         end
       end
 
-      threads.each(&.join)
+      wait_group.wait
 
-      # No specific assertion as this test focuses on ensuring no race conditions or exceptions
-      # The final state depends on the timing and order of thread execution which is non-deterministic
+      errors.should be_empty
+
+      # The machine only ever moves along defined transitions, so the current
+      # state is always one of the ten valid ids.
+      valid_state_ids.should contain(service.current_state)
     end
   end
 end
