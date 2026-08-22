@@ -8,8 +8,8 @@ module FSM
     # Optional callback to be executed during the transition.
     @callbacks : Nil | (String, Context) ->
 
-    # Optional callbacks to be executed before the transition.
-    @guards : Nil | (String, Context) ->
+    # Optional guard predicate that must return true for the transition to proceed.
+    @guards : Nil | (String, Context) -> Bool
 
     # The event that triggers the transition.
     getter event : String
@@ -31,9 +31,10 @@ module FSM
       @callbacks.try &.call(event, context)
     end
 
-    protected def can_transition?(event, context) : Bool
-      return true if @guards.nil?
-      !!@guards.try &.call(event, context)
+    protected def can_transition?(event : String, context : Context) : Bool
+      guard : Nil | (String, Context) -> Bool = @guards
+      return true if guard.nil?
+      guard.call(event, context)
     end
 
     def on(&block : (String, Context) ->) : self
@@ -41,7 +42,7 @@ module FSM
       self
     end
 
-    def guard(&block : (String, Context) ->) : self
+    def guard(&block : (String, Context) -> Bool) : self
       @guards = block
       self
     end

@@ -40,7 +40,7 @@ state1.on_event("event_to_state2", "state2") # Registers standard transition tha
 
 state2.on_event("event_to_state3", "state3") do |transition|
   transition.on {|event, context| # Transition callback. } # Registers a callback to be executed when the transition happens
-  transition.guard {|event, context| # Condition to determine if the transition should be allowed. } 
+  transition.guard {|event, context| context.get("authorized") == true } # Returns a Bool that determines whether the transition is allowed
 end
 
 state3.on_entry do |event, context|

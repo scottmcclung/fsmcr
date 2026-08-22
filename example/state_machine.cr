@@ -49,19 +49,10 @@ service = FSM::Service.interpret(machine, initial_state: "red") # machine is str
 
 # Can register new transition callbacks with the service, but the machine and the states are immutable.
 service.on_transition { |state| p "State changed to: #{state.id}" }
-service.send("event name")
 service.matches?("red") # => true
-service.current_state   # => "red"
 
-p service.current_state
+p service.current_state # => "red"
 
-p service.send("change")
-# p! service.send("change")
-p service.send("error")
-p service.send("change") # invalid
-# p! service.send("reset")
-# p! service.send("change")
-# p! service.send("change")
-# p! service.send("error")
-# p! service.send("change")
-# p! service.send("reset")
+p service.send("change").id # red -> green
+p service.send("change").id # green -> yellow
+p service.send("change").id # yellow -> red

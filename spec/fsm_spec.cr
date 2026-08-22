@@ -101,6 +101,66 @@ describe FSM::Service do
     transition_callback_called.should eq true
   end
 
+  it "completes the transition when a guard returns true" do
+    exit_action_called = false
+    transition_callback_called = false
+    entry_action_called = false
+
+    state1 = FSM::State.create("state1")
+      .on_event("event1", "state2") do |transition|
+        transition.guard { |event, context| true }
+        transition.on { |event, context| transition_callback_called = true }
+      end
+      .on_exit { |event, context| exit_action_called = true }
+
+    state2 = FSM::State.create("state2")
+      .on_entry { |event, context| entry_action_called = true }
+
+    states = [state1, state2]
+
+    machine = FSM::Machine.create("test_machine", states)
+    service = FSM::Service.interpret(machine, "state1")
+
+    service.send("event1")
+
+    service.current_state.should eq "state2"
+    exit_action_called.should eq true
+    transition_callback_called.should eq true
+    entry_action_called.should eq true
+  end
+
+  it "blocks the transition and runs no callbacks when a guard returns false" do
+    exit_action_called = false
+    transition_callback_called = false
+    entry_action_called = false
+    state_change_callback_called = false
+
+    state1 = FSM::State.create("state1")
+      .on_event("event1", "state2") do |transition|
+        transition.guard { |event, context| false }
+        transition.on { |event, context| transition_callback_called = true }
+      end
+      .on_exit { |event, context| exit_action_called = true }
+
+    state2 = FSM::State.create("state2")
+      .on_entry { |event, context| entry_action_called = true }
+
+    states = [state1, state2]
+
+    machine = FSM::Machine.create("test_machine", states)
+    service = FSM::Service.interpret(machine, "state1")
+
+    service.on_transition { |new_state| state_change_callback_called = true }
+
+    service.send("event1")
+
+    service.current_state.should eq "state1"
+    exit_action_called.should eq false
+    transition_callback_called.should eq false
+    entry_action_called.should eq false
+    state_change_callback_called.should eq false
+  end
+
   it "does not allow construction of a machine with an invalid initial state" do
     states = [
       FSM::State.create("state1"),
