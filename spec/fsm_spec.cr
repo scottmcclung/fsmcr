@@ -245,24 +245,27 @@ describe FSM::Service do
       machine = FSM::Machine.create("test_machine", states)
       service = FSM::Service.interpret(machine, states.first.id)
 
-      # In a default (non -Dpreview_mt) build the scheduler runs one fiber at a
-      # time and only switches at an explicit suspend point (I/O, sleep, channel
-      # op, contended Mutex, Fiber.yield). Service#send has none of these, so
-      # each spawned fiber runs to completion before the next is dequeued. This
-      # verifies the spawn/WaitGroup fiber lifecycle and 100 sequential send
-      # calls completing without raising or hanging. Genuine parallel contention
-      # on the transition mutex would require a -Dpreview_mt build with multiple
-      # scheduler threads. Raw Thread.new is unsupported regardless because
-      # Crystal's Mutex is fiber-aware, not thread-aware: a raw OS thread that
-      # takes the contended lock path reads an unassigned Fiber scheduler and
-      # raises.
+      # The default execution context is Fiber::ExecutionContext::Parallel but
+      # capped at capacity 1, so the scheduler runs one fiber at a time and only
+      # switches at an explicit suspend point (I/O, sleep, channel op, contended
+      # Mutex, Fiber.yield). Service#send has none of these, so each spawned
+      # fiber runs to completion before the next is dequeued. This verifies the
+      # spawn/WaitGroup fiber lifecycle and 100 sequential send calls completing
+      # without raising or hanging. Genuine parallel contention on the transition
+      # mutex requires resizing the default execution context (or spawning into
+      # an explicit Parallel context), tracked as fsmcr-9ct. -Dpreview_mt is the
+      # old scheduler and no longer compiles. Raw Thread.new is unsupported
+      # regardless because Crystal's Mutex is fiber-aware, not thread-aware: a
+      # raw OS thread that takes the contended lock path reads an unassigned
+      # Fiber scheduler and raises.
       valid_state_ids : Set(String) = states.map(&.id).to_set
 
       # Fiber#run logs unhandled fiber exceptions to stderr instead of
       # propagating them to the spec runner, so a failing send would otherwise
       # leave the spec green. Collect exceptions and assert on them directly.
-      # The mutex guards errors for a -Dpreview_mt build; in a default build the
-      # fibers do not interleave, so the append is already sequential.
+      # The mutex guards errors under a parallel execution context; in the
+      # default build the fibers do not interleave, so the append is already
+      # sequential.
       errors : Array(Exception) = [] of Exception
       error_mutex : Mutex = Mutex.new
 
