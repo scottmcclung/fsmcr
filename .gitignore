@@ -13,3 +13,9 @@
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Local AI agent tool config
+.gemini/
+
+# macOS Finder metadata
+.DS_Store
