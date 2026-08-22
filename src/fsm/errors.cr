@@ -4,4 +4,6 @@ module FSM
   class InvalidInitialStateError < StateMachineError; end
 
   class MissingTargetStateError < StateMachineError; end
+
+  class SealedStateError < StateMachineError; end
 end

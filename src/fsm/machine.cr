@@ -10,7 +10,17 @@ module FSM
     getter id : String
 
     # A collection of states associated with the state machine.
-    getter states : Hash(String, State)
+    @states : Hash(String, State)
+
+    # A shallow copy of the states associated with the state machine.
+    #
+    # Returns a duplicate so callers cannot add, delete, or replace entries in
+    # the machine's internal definition. The State values are shared but sealed,
+    # so the definition stays immutable. Internal code reads @states directly to
+    # avoid copying on the transition hot path.
+    def states : Hash(String, State)
+      @states.dup
+    end
 
     # Create a new state machine with the given identifier, states, and initial state.
     #
@@ -21,6 +31,7 @@ module FSM
     def self.create(id : String, states : Array(State))
       states_hash = states.map { |x| {x.id, x} }.to_h
       check_states(states_hash)
+      states.each(&.seal)
       new(id, states_hash)
     end
 
@@ -51,13 +62,13 @@ module FSM
     # @return [Tuple(Transition, State)] The transition and the new state after the transition.
     protected def transition(event : String, current_state : State)
       # No transition made if current state received is unrecognized.
-      return {nil, current_state} unless state = states[current_state.id]?
+      return {nil, current_state} unless state = @states[current_state.id]?
 
       # No transition made if the event received is not registered for the current_state
       return {nil, current_state} unless transition = state.transition(event)
 
       # No transition made if the target defined on the transition doesn't exist
-      return {nil, current_state} unless new_state = states[transition.target]?
+      return {nil, current_state} unless new_state = @states[transition.target]?
 
       {transition, new_state}
     end
