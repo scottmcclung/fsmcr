@@ -2,3 +2,4 @@
 {"id":"int-1a59baf6088aa229001bd5e9c78b6e82","kind":"field_change","created_at":"2026-08-22T15:50:51.536075Z","actor":"Scott McClung","issue_id":"fsmcr-4u9","extra":{"field":"assignee","new_value":"","old_value":"Scott McClung"}}
 {"id":"int-7e99b3022a621dcef675d6b63fb301ce","kind":"field_change","created_at":"2026-08-22T16:19:02.394911Z","actor":"Scott McClung","issue_id":"fsmcr-4u9","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-7e9f49bf919abdce8809094541c47eed","kind":"field_change","created_at":"2026-08-22T18:02:43.543806Z","actor":"Scott McClung","issue_id":"fsmcr-urh","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-6c646dccb17361a49d51e11ed495b5bf","kind":"field_change","created_at":"2026-08-22T18:24:07.003785Z","actor":"Scott McClung","issue_id":"fsmcr-9ct","extra":{"field":"priority","new_value":"2","old_value":"3"}}
