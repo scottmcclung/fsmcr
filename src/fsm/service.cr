@@ -5,6 +5,15 @@ module FSM
   # at a time, queueing on @transition_mutex (design section 12.2). It holds the
   # shared immutable machine, the caller's context, and one cached State snapshot.
   #
+  # Section 12's serialization contract, as it lands here: @transition_mutex covers
+  # interpreter state only, that is @state and the observers read alongside it. The
+  # machine definition is safe to share without the lock because it is sealed and
+  # immutable after build (design section 12.3, point 1). T is the caller's
+  # responsibility; the library guarantees nothing about a context shared across
+  # interpreters or fibers (design section 12.3, point 3). AsyncService(T) serializes
+  # the same interpreter state by fiber ownership instead of a lock: exactly one fiber
+  # ever runs the machine's code (design section 12.2).
+  #
   # D18: the snapshot is the interpreter's only position field. Service derives the
   # current StateDefinition from `snapshot.id` when it needs to plan, rather than
   # holding both a snapshot and a definition and keeping them in step.
