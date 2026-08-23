@@ -156,7 +156,7 @@ describe "on_unknown_event" do
 
     ctx.log.should eq ["You can't xyzzy here."]
     # An unknown step is a step that moved nowhere (design section 3.3).
-    service.current_state.should eq "cave"
+    service.current_state.id.should eq "cave"
   end
 
   it "does not fire on_unknown_event when a transition succeeds (Service)" do
@@ -174,7 +174,7 @@ describe "on_unknown_event" do
     service.send("north")
 
     ctx.log.should be_empty
-    service.current_state.should eq "clearing"
+    service.current_state.id.should eq "clearing"
   end
 
   it "does not fire on_unknown_event for a blocked event (Service)" do
@@ -194,7 +194,7 @@ describe "on_unknown_event" do
     # "north" is registered but its guard rejected: that is a blocked event, not an unknown
     # one, so on_unknown_event stays silent (design section 9).
     ctx.log.should be_empty
-    service.current_state.should eq "cave"
+    service.current_state.id.should eq "cave"
   end
 
   it "fires on_unknown_event but not on_blocked for an unknown event, and vice versa for a blocked event (Service)" do
@@ -255,7 +255,7 @@ describe "on_unknown_event" do
     service.send("plugh")
 
     ctx.log.should eq ["unknown: xyzzy", "unknown: plugh"]
-    service.current_state.should eq "cave"
+    service.current_state.id.should eq "cave"
   end
 
   it "consults only the current state's handler, never another state's (Service)" do
@@ -278,7 +278,7 @@ describe "on_unknown_event" do
     service.send("xyzzy")
 
     ctx.log.should be_empty
-    service.current_state.should eq "clearing"
+    service.current_state.id.should eq "clearing"
   end
 
   it "remains a silent no-op for an unknown event with no handler registered (Service)" do
@@ -297,6 +297,6 @@ describe "on_unknown_event" do
     # No handler registered: the existing silent no-op behavior is unchanged. The
     # interpreter stayed put and no callback ran.
     ctx.log.should be_empty
-    service.current_state.should eq "cave"
+    service.current_state.id.should eq "cave"
   end
 end

@@ -130,7 +130,7 @@ describe "on_event_processed" do
 
     # One fire per send, regardless of outcome (design section 9).
     fire_count.should eq 3
-    service.current_state.should eq "clearing"
+    service.current_state.id.should eq "clearing"
   end
 
   it "fires on_event_processed but not on_transition for a blocked event" do

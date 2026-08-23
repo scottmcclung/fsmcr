@@ -16,12 +16,9 @@ module FSM
   #
   # D18: the snapshot is the interpreter's only position field. Service derives the
   # current StateDefinition from `snapshot.id` when it needs to plan, rather than
-  # holding both a snapshot and a definition and keeping them in step.
-  #
-  # Scope note (fsmcr-crj): `current_state` and `send` changing their public return
-  # to the snapshot is a later issue. In this issue `current_state` returns the
-  # current state id and `matches?` compares against it, preserving today's
-  # observable position contract.
+  # holding both a snapshot and a definition and keeping them in step. `current_state`
+  # returns that cached snapshot, and `matches?` compares against its id (design
+  # section 8.1).
   class Service(T)
     include ObserverFiring
 
@@ -110,27 +107,31 @@ module FSM
       State.new(id: initial_state, status: Status::Success, error: nil)
     end
 
-    # The current state id (design section 8.1). Reads the cached snapshot's id.
-    # Locked under @transition_mutex because @state is a 3-field struct snapshot
-    # that `send` replaces as a whole: a parallel reader can tear it mid-write,
-    # unlike the old single-reference position field. The lock is what makes the
-    # interpreter's own state advance atomically (design section 12.3, point 2).
+    # The cached State snapshot (design section 3.3, section 8.1, D18). One type
+    # describes the runtime value everywhere it is read; `current_state.id` gives the
+    # string when that is what is wanted. State is an immutable value, so returning it
+    # leaks no mutability back into the interpreter.
+    #
+    # Locked under @transition_mutex because @state is a 3-field struct snapshot that
+    # `send` replaces as a whole: a parallel reader can tear it mid-write. The lock is
+    # what makes the interpreter's own state advance atomically (design section 12.3,
+    # point 2).
     #
     # A callback of this same service calls on the owner fiber, which already holds
     # the mutex; re-acquiring the checked mutex would raise "Can't lock mutex
     # recursively", so the whole outer transition would fall into the failure envelope.
     # The owner instead reads @state directly, no lock: @state is written only by the
     # owner fiber while it holds the lock, so the owner reading its own writes is safe,
-    # and per section 11 an entry callback reading here sees the OLD, pre-commit state.
-    # Non-owner fibers take the locked path unchanged.
-    def current_state : String
+    # and per section 11 an entry callback reading here sees the OLD, pre-commit
+    # snapshot. Non-owner fibers take the locked path unchanged.
+    def current_state : State
       current : Fiber = Fiber.current
       owner : Fiber? = @owner_fiber.get
-      return @state.id if owner && owner.same?(current)
-      @transition_mutex.synchronize { @state.id }
+      return @state if owner && owner.same?(current)
+      @transition_mutex.synchronize { @state }
     end
 
-    # Sugar for `current_state == state_id` (design section 8.1). Locked for the
+    # Sugar for `current_state.id == state_id` (design section 8.1). Locked for the
     # same torn-read reason as `current_state` (design section 12.3, point 2), and
     # takes the same owner-fiber fast path so a reentrant callback does not deadlock
     # on the checked mutex.

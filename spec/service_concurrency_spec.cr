@@ -109,7 +109,7 @@ describe "FSM::Service under real parallel contention" do
     # land. Remove the mutex and concurrent read-yield-write increments clobber one
     # another, so the counter falls short of `total`.
     ctx.counter.should eq total
-    service.current_state.should eq "counting"
+    service.current_state.id.should eq "counting"
   end
 
   it "never runs two send bodies at the same time" do
@@ -198,6 +198,6 @@ describe "FSM::Service under real parallel contention" do
 
     errors.should be_empty
     non_success.should be_empty
-    valid_ids.should contain(service.current_state)
+    valid_ids.should contain(service.current_state.id)
   end
 end

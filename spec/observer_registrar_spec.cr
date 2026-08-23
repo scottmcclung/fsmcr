@@ -259,7 +259,7 @@ describe "Service observer registrar" do
 
     result.id.should eq "clearing"
     result.status.should eq FSM::Status::Success
-    service.current_state.should eq "clearing"
+    service.current_state.id.should eq "clearing"
   end
 
   it "keeps the last registration when the same observer is registered twice within the block" do

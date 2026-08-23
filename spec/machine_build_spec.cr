@@ -137,7 +137,7 @@ describe "Machine(T).build" do
     service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
     service.send("north")
 
-    service.current_state.should eq "clearing"
+    service.current_state.id.should eq "clearing"
   end
 
   it "does not treat state ids as shared across separate Machine.build calls" do

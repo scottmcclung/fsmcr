@@ -51,7 +51,7 @@ describe "Service#send failure envelope and observer independence" do
       result.error.should eq boom
       # The step never committed, so the pointer stays at "cave" (design section 11).
       result.id.should eq "cave"
-      service.current_state.should eq "cave"
+      service.current_state.id.should eq "cave"
     end
 
     it "fires on_event_processed with the Failed snapshot and not on_transition (D19)" do
@@ -113,7 +113,7 @@ describe "Service#send failure envelope and observer independence" do
 
       # The step committed before observers fired (design section 10.3 step 18, step
       # 20), so the pointer moved even though on_transition then raised.
-      service.current_state.should eq "clearing"
+      service.current_state.id.should eq "clearing"
 
       # on_event_processed still fired after on_transition raised, and received the
       # accurate committed snapshot (design section 9: it fires after every step).
@@ -153,7 +153,7 @@ describe "Service#send failure envelope and observer independence" do
 
       # on_event_processed fired despite on_transition raising first (design section 9).
       processed_fired.should be_true
-      service.current_state.should eq "clearing"
+      service.current_state.id.should eq "clearing"
     end
   end
 
@@ -185,7 +185,7 @@ describe "Service#send failure envelope and observer independence" do
       # on_transition ran cleanly before on_event_processed raised, and the step
       # committed (design section 10.3 step 18).
       transition_fired.should be_true
-      service.current_state.should eq "clearing"
+      service.current_state.id.should eq "clearing"
     end
   end
 end

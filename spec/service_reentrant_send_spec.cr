@@ -95,7 +95,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
       result.status.should eq FSM::Status::Success
       # The queued "next" drained after "go" committed, so the machine ends at "settled"
       # (section 10.3 step 21).
-      service.current_state.should eq "settled"
+      service.current_state.id.should eq "settled"
     end
 
     # RED: same queue-and-drain path reached from a transition callback (t.on) rather
@@ -125,7 +125,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
       result : FSM::State = service.send("go")
 
       result.status.should eq FSM::Status::Success
-      service.current_state.should eq "settled"
+      service.current_state.id.should eq "settled"
     end
 
     # RED: proves the queued event runs AFTER the current callback fully returns and the
@@ -194,7 +194,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
 
       # The drain still ran to completion, so the interpreter now sits at the final
       # drained state even though the returned snapshot is the outer event's own.
-      service.current_state.should eq "settled"
+      service.current_state.id.should eq "settled"
     end
   end
 
@@ -306,7 +306,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
       # b commits, then to_c drains and enters c, then to_d drains and enters d
       # (section 10.3 step 21, each drained event looping back to step 8).
       ctx.log.should eq ["b", "c", "d"]
-      service.current_state.should eq "d"
+      service.current_state.id.should eq "d"
     end
   end
 
@@ -387,7 +387,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
 
       # e1 failed to enter "c", so the pointer stayed at "b"; the drain then halted, so
       # e2 never ran and "d" was never entered (decision 3, AsyncService cascade halt).
-      service.current_state.should eq "b"
+      service.current_state.id.should eq "b"
       ctx.log.should_not contain "entered-d"
     end
   end
@@ -436,7 +436,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
       # e1 committed into "c" before its observer raised (section 10.3 step 18 precedes
       # step 20), so the pointer is at "c"; the drain aborted, so e2 never ran and "d"
       # was never entered.
-      service.current_state.should eq "c"
+      service.current_state.id.should eq "c"
       ctx.log.should_not contain "entered-d"
     end
   end
@@ -458,7 +458,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
     it "reads the pre-commit state from a transition callback (t.on) without deadlocking, and still commits" do
       ctx : TurnContext = TurnContext.new
       svc : FSM::Service(TurnContext)? = nil
-      seen_current : String? = nil
+      seen_current : FSM::State? = nil
       seen_matches_a : Bool? = nil
       seen_matches_b : Bool? = nil
 
@@ -489,11 +489,15 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
       # than falling into the failure envelope.
       result.status.should eq FSM::Status::Success
       result.id.should eq "b"
-      service.current_state.should eq "b"
+      service.current_state.id.should eq "b"
 
       # The mid-step reads saw the pre-commit state "a" (section 11): during the transition
       # callback the commit has not happened yet, so the interpreter is still on "a".
-      seen_current.should eq "a"
+      seen_current.should_not be_nil
+      if snapshot = seen_current
+        snapshot.id.should eq "a"
+        snapshot.status.should eq FSM::Status::Success
+      end
       seen_matches_a.should eq true
       seen_matches_b.should eq false
     end
@@ -502,7 +506,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
     it "reads the pre-commit state from an entry callback without deadlocking, and still commits" do
       ctx : TurnContext = TurnContext.new
       svc : FSM::Service(TurnContext)? = nil
-      seen_current : String? = nil
+      seen_current : FSM::State? = nil
       seen_matches_a : Bool? = nil
       seen_matches_b : Bool? = nil
 
@@ -529,11 +533,15 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
 
       result.status.should eq FSM::Status::Success
       result.id.should eq "b"
-      service.current_state.should eq "b"
+      service.current_state.id.should eq "b"
 
       # Per section 11 an entry callback reading the current state sees the OLD state, so
       # the readings taken during "b".on_entry are still "a", the state being left.
-      seen_current.should eq "a"
+      seen_current.should_not be_nil
+      if snapshot = seen_current
+        snapshot.id.should eq "a"
+        snapshot.status.should eq FSM::Status::Success
+      end
       seen_matches_a.should eq true
       seen_matches_b.should eq false
     end
@@ -582,14 +590,14 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
       result : FSM::State = service.send("go")
       result.status.should eq FSM::Status::Failed
       result.id.should eq "a"
-      service.current_state.should eq "a"
+      service.current_state.id.should eq "a"
 
       # A subsequent send works normally: the ensure cleared @pending, so "recover" commits
       # to "recovered" and the drain that follows it finds no stale "next" to replay.
       recovered : FSM::State = service.send("recover")
       recovered.status.should eq FSM::Status::Success
       recovered.id.should eq "recovered"
-      service.current_state.should eq "recovered"
+      service.current_state.id.should eq "recovered"
       ctx.log.should_not contain "leaked-next-applied"
     end
   end

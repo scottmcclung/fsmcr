@@ -5,12 +5,11 @@ require "wait_group"
 # spec ports the pre-rewrite behavioral coverage onto the new construction API:
 # a machine is built with `Machine(T).build`, and `Service(T).interpret` runs it.
 #
-# Scope note (design section 3.3, D18 and fsmcr-crj): `current_state` and `send`
-# changing their public return to the `State` snapshot is fsmcr-crj's scope. This
-# issue (fsmcr-bfn.2) keeps the observable position contract as it stands today:
-# `current_state` reads the current state id and `matches?` compares against it.
-# The `on_transition` observer payload is likewise settled under crj, so these
-# specs only assert that it fires, never on its argument.
+# Note (design section 3.3, D18): `current_state` returns the cached `State`
+# snapshot, so these specs read the id off it with `current_state.id`, and
+# `matches?` compares against that id. The `on_transition` observer payload is
+# settled elsewhere, so these specs only assert that it fires, never on its
+# argument.
 describe FSM::Service do
   it "reports the initial state id on creation" do
     machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("test_machine") do |m|
@@ -20,7 +19,7 @@ describe FSM::Service do
     end
 
     service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "state1", FSM::Context.new)
-    service.current_state.should eq "state1"
+    service.current_state.id.should eq "state1"
   end
 
   it "transitions between states on a recognized event" do
@@ -32,7 +31,7 @@ describe FSM::Service do
     service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "state1", FSM::Context.new)
     service.send("event1")
 
-    service.current_state.should eq "state2"
+    service.current_state.id.should eq "state2"
   end
 
   it "does not transition on an unrecognized event" do
@@ -44,7 +43,7 @@ describe FSM::Service do
     service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "state1", FSM::Context.new)
     service.send("invalid_event")
 
-    service.current_state.should eq "state1"
+    service.current_state.id.should eq "state1"
   end
 
   it "runs entry and exit callbacks during a transition, passing the context" do
@@ -123,7 +122,7 @@ describe FSM::Service do
     service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "state1", ctx)
     service.send("event1")
 
-    service.current_state.should eq "state2"
+    service.current_state.id.should eq "state2"
     ctx.log.should contain "exited"
     ctx.log.should contain "transitioned"
     ctx.log.should contain "entered"
@@ -152,7 +151,7 @@ describe FSM::Service do
 
     service.send("event1")
 
-    service.current_state.should eq "state1"
+    service.current_state.id.should eq "state1"
     ctx.log.should be_empty
     observer_fired.should be_false
   end
@@ -192,7 +191,7 @@ describe FSM::Service do
     spawn { service.send("event1") }
     service.send("event1")
 
-    service.current_state.should eq "state2"
+    service.current_state.id.should eq "state2"
   end
 
   context "concurrency test with complex FSM setup" do
@@ -246,7 +245,7 @@ describe FSM::Service do
 
       # The machine only ever moves along defined transitions, so the current
       # state is always one of the ten valid ids.
-      valid_state_ids.should contain(service.current_state)
+      valid_state_ids.should contain(service.current_state.id)
     end
   end
 end

@@ -40,7 +40,7 @@ describe FSM::Transition do
     service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
     service.send("north")
 
-    service.current_state.should eq "cave"
+    service.current_state.id.should eq "cave"
   end
 
   it "carries a guard registered on the shared object into the interpreter, passing when it accepts" do
@@ -58,6 +58,6 @@ describe FSM::Transition do
     service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
     service.send("north")
 
-    service.current_state.should eq "clearing"
+    service.current_state.id.should eq "clearing"
   end
 end

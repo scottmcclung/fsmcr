@@ -181,7 +181,7 @@ describe "on_blocked" do
 
     ctx.log.should eq ["too steep without a rope"]
     # A blocked step is a successful transaction that moved nowhere (design section 3.3).
-    service.current_state.should eq "cave"
+    service.current_state.id.should eq "cave"
   end
 
   it "does not fire on_blocked for an unknown event (Service)" do
@@ -201,7 +201,7 @@ describe "on_blocked" do
     # No transition is registered for "xyzzy" at all, so on_blocked must stay silent
     # (design section 9). on_unknown_event is a separate handler (fsmcr-bfn.5).
     ctx.log.should be_empty
-    service.current_state.should eq "cave"
+    service.current_state.id.should eq "cave"
   end
 
   it "does not fire on_blocked when a transition succeeds (Service)" do
@@ -219,7 +219,7 @@ describe "on_blocked" do
     service.send("north")
 
     ctx.log.should be_empty
-    service.current_state.should eq "clearing"
+    service.current_state.id.should eq "clearing"
   end
 
   it "does not fire on_blocked on fallthrough where an earlier guard fails but a later one passes (Service)" do
@@ -241,7 +241,7 @@ describe "on_blocked" do
     service.send("north")
 
     ctx.log.should be_empty
-    service.current_state.should eq "tunnel"
+    service.current_state.id.should eq "tunnel"
   end
 
   it "passes the correct event name to the handler (Service)" do
@@ -359,7 +359,7 @@ describe "on_blocked" do
     service.send("down")
 
     ctx.log.should be_empty
-    service.current_state.should eq "cave"
+    service.current_state.id.should eq "cave"
   end
 
   it "consults only the current state's handler, never another state's (Service)" do
@@ -381,6 +381,6 @@ describe "on_blocked" do
     service.send("south")
 
     ctx.log.should be_empty
-    service.current_state.should eq "clearing"
+    service.current_state.id.should eq "clearing"
   end
 end

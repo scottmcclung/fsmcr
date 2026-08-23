@@ -66,7 +66,7 @@ describe "self-transitions" do
     service.send("look")
 
     ctx.log.should eq ["exit", "transition", "entry"]
-    service.current_state.should eq "cave"
+    service.current_state.id.should eq "cave"
   end
 
   it "suppresses exit and entry for an internal self-transition (Service)" do
@@ -84,6 +84,6 @@ describe "self-transitions" do
     service.send("look")
 
     ctx.log.should eq ["transition"]
-    service.current_state.should eq "cave"
+    service.current_state.id.should eq "cave"
   end
 end

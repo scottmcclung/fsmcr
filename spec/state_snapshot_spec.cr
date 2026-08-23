@@ -7,9 +7,9 @@ require "./spec_helper"
 #
 # By design the type does not enforce the invariant that Success carries no error
 # and Failed carries one; construction is expected to maintain it. This issue
-# (fsmcr-bfn.2) delivers the type and its shape. The snapshot becoming the public
-# return value of Service#send and Service#current_state is fsmcr-crj's scope and
-# is not spec'd here.
+# (fsmcr-bfn.2) delivers the type and its shape. The snapshot being the return
+# value of Service#send and Service#current_state is spec'd separately (D18); this
+# spec covers only the struct itself.
 #
 # Open question for the implementer: the exact constructor keyword arguments. These
 # specs assume `State.new(id:, status:, error:)`.
