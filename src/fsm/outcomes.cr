@@ -34,10 +34,19 @@ module FSM
   # (design section 6, step 13). Deliberately not generic: it carries no T, so
   # parameterizing it would force TransitionsBlocked(T).new purely to satisfy
   # inference (design section 6).
+  #
+  # `blocked` holds the target state ids of every candidate that rejected, in
+  # registration order, collected while resolution walked the candidates (design
+  # section 9, D12). The Blocked action's callback closes over these ids so an
+  # on_blocked handler can name what was blocked without re-evaluating any guard
+  # (the tge-teg double-evaluation regression, design section 9). The ids are
+  # strings, so carrying them does not make the outcome generic.
   struct TransitionsBlocked
+    getter blocked : Array(String)
+
     # Protected so the outcome cannot be constructed from outside the FSM
     # namespace (D7). In-namespace callers such as StateDefinition#resolve build it.
-    protected def initialize
+    protected def initialize(@blocked : Array(String))
     end
   end
 

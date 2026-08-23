@@ -22,6 +22,14 @@ module FSM
     @entry_callback : ((String, T) ->)? = nil
     @exit_callback : ((String, T) ->)? = nil
 
+    # Per-event blocked handlers, keyed by event (design section 9, section 13.3,
+    # D12). A handler fires when the event has candidate transitions but every guard
+    # rejected. The keying is per event because different blocked events want
+    # different messages; on_unknown_event is state-wide by contrast (design
+    # section 9, D10). The handler receives the event, the context, and the
+    # Array(String) of blocked target ids so it never re-runs a guard predicate.
+    @blocked_callbacks : Hash(String, (String, T, Array(String)) ->) = {} of String => (String, T, Array(String)) ->
+
     # Whether the owning machine has sealed this definition (design section 5).
     @sealed : Bool = false
 
@@ -43,6 +51,19 @@ module FSM
     def on_exit(&block : (String, T) ->) : self
       raise SealedStateError.new "Cannot register an exit callback on state #{@id} after it has been sealed by a machine." if @sealed
       @exit_callback = block
+      self
+    end
+
+    # Register a handler fired when the event has candidate transitions but every
+    # guard rejected (design section 9, section 13.3, D12). It is keyed per event
+    # and does not fire for an unknown event or when any transition succeeds. The
+    # handler receives the blocked target ids so it can give a specific reason
+    # without re-evaluating any guard (design section 9). Registering a second
+    # handler for the same event replaces the first (last write wins, the same
+    # semantics as on_entry and on_exit).
+    def on_blocked(event : String, &block : (String, T, Array(String)) ->) : self
+      raise SealedStateError.new "Cannot register a blocked handler on state #{@id} after it has been sealed by a machine." if @sealed
+      @blocked_callbacks[event] = block
       self
     end
 
@@ -88,11 +109,19 @@ module FSM
       candidates : Array(Transition(T))? = @transitions[event]?
       return EventNotRecognized.new if candidates.nil?
 
+      # Collect the target of each rejected candidate as it is walked, in
+      # registration order, so a blocked outcome carries what was blocked without a
+      # second guard pass (design section 9, D12). This array is freshly allocated on
+      # every resolve call and nothing mutates it after this loop; the TransitionsBlocked
+      # outcome getter and the Blocked action's closure share the same instance by
+      # design.
+      blocked : Array(String) = [] of String
       candidates.each do |transition|
         return TransitionFound(T).new(transition) if transition.passes_guard?(event, context)
+        blocked << transition.target
       end
 
-      TransitionsBlocked.new
+      TransitionsBlocked.new(blocked)
     end
 
     # Seal this definition and every transition it owns (design section 5).
@@ -113,6 +142,13 @@ module FSM
     # B, design section 10.2 step 15).
     protected def entry_callback : (String, T) ->
       @entry_callback || ->(_event : String, _context : T) { }
+    end
+
+    # The blocked handler registered for an event, or nil when none is registered
+    # (design section 10.2 step 15). `plan` uses its presence to decide whether a
+    # blocked outcome emits a Blocked action or an empty action list.
+    protected def blocked_callback(event : String) : ((String, T, Array(String)) ->)?
+      @blocked_callbacks[event]?
     end
   end
 end

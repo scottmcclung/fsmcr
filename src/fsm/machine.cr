@@ -60,16 +60,34 @@ module FSM
         target : StateDefinition(T) = @states[transition.target]
         Plan(T).new(outcome, target, transition_actions(state, transition, target))
       in TransitionsBlocked
-        # Step 14: destination is the unchanged current state. Empty action list in
-        # this issue; the Blocked action needs an on_blocked handler (fsmcr-bfn.4,
-        # design section 10.2 step 15).
-        Plan(T).new(outcome, state, [] of Action(T))
+        # Step 14: destination is the unchanged current state. Step 15: a single
+        # Blocked action when the state has a handler for this event, else an empty
+        # list (design section 10.2 step 15). The action carries the blocked target
+        # ids resolution already collected, so the blocked path never re-runs a
+        # guard (design section 9, D12).
+        Plan(T).new(outcome, state, blocked_actions(state, event, outcome.blocked))
       in EventNotRecognized
         # Step 14: destination is the unchanged current state. Empty action list in
         # this issue; the UnknownEvent action needs an on_unknown_event handler
         # (fsmcr-bfn.5, design section 10.2 step 15).
         Plan(T).new(outcome, state, [] of Action(T))
       end
+    end
+
+    # The action list for a blocked event (design section 10.2 step 15). A single
+    # Blocked action when the state registered a handler for the event, else empty.
+    # The action's state_id is the unchanged current state (step 14). Its callback
+    # closes over the blocked target ids so the interpreter's (String, T) -> action
+    # shape invokes the 3-arg handler without re-evaluating any guard (design
+    # section 9, D12).
+    private def blocked_actions(state : StateDefinition(T), event : String, blocked : Array(String)) : Array(Action(T))
+      handler : ((String, T, Array(String)) ->)? = state.blocked_callback(event)
+      return [] of Action(T) if handler.nil?
+
+      callback : (String, T) -> = ->(fired_event : String, context : T) do
+        handler.call(fired_event, context, blocked)
+      end
+      [Action(T).new(ActionKind::Blocked, state.id, callback)]
     end
 
     # The ordered action list for a found transition (design section 10.2 step 15).

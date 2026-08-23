@@ -17,12 +17,14 @@ require "./support/plan_probe"
 #   TransitionFound, different state          -> [Exit(current), Transition, Entry(next)]
 #   TransitionFound, same state, external     -> the same three (see self_transition_spec)
 #   TransitionFound, same state, internal     -> [Transition] only (see self_transition_spec)
-#   TransitionsBlocked                        -> empty in this issue
+#   TransitionsBlocked                        -> empty when no on_blocked handler
 #   EventNotRecognized                        -> empty in this issue
 #
-# The Blocked and UnknownEvent actions require on_blocked / on_unknown_event
-# handlers, which are fsmcr-bfn.4 and fsmcr-bfn.5. Those ActionKind variants exist,
-# but plan never emits them yet. Only the emptiness of the action list is asserted
+# TransitionsBlocked is empty here because no on_blocked handler is registered for
+# the event; see spec/on_blocked_spec.cr for the handler-registered case where plan
+# emits a Blocked action (fsmcr-bfn.4). The UnknownEvent action requires an
+# on_unknown_event handler, which is fsmcr-bfn.5; that ActionKind variant exists,
+# but plan never emits it yet. Only the emptiness of the action list is asserted
 # here.
 describe "plan" do
   it "emits Exit(current), Transition, Entry(next) for a transition to a different state" do
@@ -138,8 +140,9 @@ describe "plan" do
 
     plan : FSM::Plan(TurnContext) = FSM::PlanProbe.plan(machine, machine.states["cave"], "north", ctx)
 
-    # The Blocked action needs an on_blocked handler (fsmcr-bfn.4); until then the
-    # list is empty (design section 10.2 step 15).
+    # The Blocked action needs an on_blocked handler for the event; this state
+    # registers none, so the list is empty (design section 10.2 step 15). See
+    # spec/on_blocked_spec.cr for the handler-registered case.
     plan.actions.should be_empty
     # The destination for a blocked step is the unchanged current state (step 14).
     plan.next_state.id.should eq "cave"

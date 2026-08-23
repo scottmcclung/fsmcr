@@ -58,6 +58,18 @@ describe "machine sealing" do
     end
   end
 
+  it "raises when on_blocked is called on a sealed StateDefinition" do
+    machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("test_machine") do |m|
+      m.state("state1") { |s| s.on_event("go", "state1") { |t| t.guard { |_event, _context| false } } }
+    end
+
+    sealed : FSM::StateDefinition(FSM::Context) = machine.states["state1"]
+
+    expect_raises(FSM::SealedStateError) do
+      sealed.on_blocked("go") { |_event, _context, _blocked| }
+    end
+  end
+
   it "raises when Transition#on is called after the machine seals the transition" do
     captured : FSM::Transition(FSM::Context)? = nil
 
