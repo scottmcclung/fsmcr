@@ -93,4 +93,25 @@ describe "machine sealing" do
       fail "expected the builder to yield the transition"
     end
   end
+
+  # Decision C (fsmcr-bfn.3): the internal flag is definition state, so marking a
+  # transition internal after seal must raise like `on` and `guard` do. Sealing
+  # means what you built is what runs (design section 5, section 9.1).
+  it "raises when Transition#internal is called after the machine seals the transition" do
+    captured : FSM::Transition(FSM::Context)? = nil
+
+    FSM::Machine(FSM::Context).build("test_machine") do |m|
+      m.state("state1") do |s|
+        s.on_event("go", "state1") { |t| captured = t }
+      end
+    end
+
+    if transition = captured
+      expect_raises(FSM::SealedStateError) do
+        transition.internal
+      end
+    else
+      fail "expected the builder to yield the transition"
+    end
+  end
 end

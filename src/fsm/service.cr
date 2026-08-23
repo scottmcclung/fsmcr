@@ -60,25 +60,26 @@ module FSM
     # (design section 10.7).
     def send(event : String) : State
       @transition_mutex.synchronize do
+        # Step 8: derive the current definition from the cached snapshot id (D18).
         definition : StateDefinition(T)? = @machine.state_by_id(@state.id)
         # The snapshot id always came from the machine, so the definition exists.
         return @state unless definition
 
-        transition, target = @machine.transition(event, definition)
-        return @state if transition.nil?
-        return @state unless transition.passes_guard?(event, @context)
+        # Steps 9-16: the pure core decides; it runs nothing.
+        plan : Plan(T) = @machine.plan(definition, event, @context)
 
-        # Step 17: exit, transition callback, entry. The only place user callback
-        # code runs.
-        definition.run_exit_callback(event, @context)
-        transition.run_callback(event, @context)
-        target.run_entry_callback(event, @context)
+        # Step 17: run each action in order. The only place user callback code runs.
+        # A blocked or unrecognized event has an empty action list in this issue, so
+        # nothing runs (design section 10.2 step 15).
+        plan.actions.each(&.callback.call(event, @context))
 
-        # Step 18: commit by replacing the cached snapshot (D18).
-        @state = State.new(id: target.id, status: Status::Success, error: nil)
+        # Step 18: commit by replacing the cached snapshot (D18). next_state is the
+        # target on TransitionFound and the unchanged current state otherwise.
+        @state = State.new(id: plan.next_state.id, status: Status::Success, error: nil)
 
-        # Step 20: fire on_transition on a successful transition.
-        @on_transition.try &.call(@state)
+        # Step 20: fire on_transition only when a transition actually occurred
+        # (design section 9). Blocked and unrecognized events do not fire it.
+        @on_transition.try(&.call(@state)) if plan.outcome.is_a?(TransitionFound)
 
         @state
       end

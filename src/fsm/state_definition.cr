@@ -11,10 +11,13 @@ module FSM
   class StateDefinition(T)
     getter id : String
 
-    # Single transition per event, matching the resolution logic as it stands
-    # today. Multiple transitions per event (Hash(String, Array(Transition(T))))
-    # is design section 6 and lands with fsmcr-bfn.3.
-    @transitions : Hash(String, Transition(T)) = {} of String => Transition(T)
+    # Multiple transitions per event, distinguished by guards (design section 6,
+    # D3). Each on_event for the same event appends, and resolution walks the array
+    # in registration order (design section 6, step 12). A guardless transition
+    # registered before others for the same event makes them unreachable, and a
+    # guardless fallback and a future on_blocked handler for the same event are
+    # mutually exclusive (design section 6, section 13.2, D11).
+    @transitions : Hash(String, Array(Transition(T))) = {} of String => Array(Transition(T))
 
     @entry_callback : ((String, T) ->)? = nil
     @exit_callback : ((String, T) ->)? = nil
@@ -44,51 +47,72 @@ module FSM
     end
 
     # Register a transition from this state to a target on an event (design
-    # section 4). The single-transition form used when no guard or transition
-    # callback is needed.
+    # section 4, section 6). Calling on_event repeatedly for one event appends,
+    # building the ordered candidate list resolution walks (design section 6).
     def on_event(event : String, target : String) : self
       raise SealedStateError.new "Cannot register a transition on state #{@id} after it has been sealed by a machine." if @sealed
-      @transitions[event] = Transition(T).new(event, target)
+      append_transition(Transition(T).new(event, target))
       self
     end
 
-    # Register a transition and yield it so a guard or transition callback can be
-    # attached (design section 4). Because Transition(T) is a class, the yielded
-    # object is the same one the machine keeps and the interpreter reads at
-    # runtime (design section 5, D16).
+    # Register a transition and yield it so a guard, transition callback, or the
+    # internal flag can be attached (design section 4, section 9.1). Because
+    # Transition(T) is a class, the yielded object is the same one the machine keeps
+    # and the interpreter reads at runtime (design section 5, D16).
     def on_event(event : String, target : String, &) : self
       raise SealedStateError.new "Cannot register a transition on state #{@id} after it has been sealed by a machine." if @sealed
       transition : Transition(T) = Transition(T).new(event, target)
       yield transition
-      @transitions[event] = transition
+      append_transition(transition)
       self
+    end
+
+    # Append a transition to its event's candidate list, preserving registration
+    # order (design section 6, step 12).
+    private def append_transition(transition : Transition(T)) : Nil
+      (@transitions[transition.event] ||= [] of Transition(T)) << transition
     end
 
     # The distinct target states reachable from this state, used by the builder to
     # validate that every target names an existing state (design section 4).
     def all_target_states : Array(String)
-      @transitions.values.map(&.target).uniq
+      @transitions.values.flatten.map(&.target).uniq
     end
 
-    # The transition registered for an event, or nil if the event is unrecognized
-    # here (design section 10.2, step 10).
-    protected def transition(event : String) : Transition(T)?
-      @transitions[event]?
+    # Resolve the outcome for an event in this context (design section 6, section
+    # 10.2 steps 10-13). An unregistered event is EventNotRecognized; otherwise the
+    # candidates are walked in registration order and the first whose guard passes
+    # wins (a guardless transition always passes), stopping evaluation; if every
+    # candidate rejects, the outcome is TransitionsBlocked.
+    protected def resolve(event : String, context : T) : TransitionFound(T) | TransitionsBlocked | EventNotRecognized
+      candidates : Array(Transition(T))? = @transitions[event]?
+      return EventNotRecognized.new if candidates.nil?
+
+      candidates.each do |transition|
+        return TransitionFound(T).new(transition) if transition.passes_guard?(event, context)
+      end
+
+      TransitionsBlocked.new
     end
 
     # Seal this definition and every transition it owns (design section 5).
     # Idempotent: sealing an already-sealed definition is a no-op.
     protected def seal : Nil
       @sealed = true
-      @transitions.each_value(&.seal)
+      @transitions.each_value(&.each(&.seal))
     end
 
-    protected def run_entry_callback(event : String, context : T) : Nil
-      @entry_callback.try &.call(event, context)
+    # The exit callback as a real proc, a no-op when none is registered, so the
+    # plan's action list is positional regardless of registration (decision B,
+    # design section 10.2 step 15).
+    protected def exit_callback : (String, T) ->
+      @exit_callback || ->(_event : String, _context : T) { }
     end
 
-    protected def run_exit_callback(event : String, context : T) : Nil
-      @exit_callback.try &.call(event, context)
+    # The entry callback as a real proc, a no-op when none is registered (decision
+    # B, design section 10.2 step 15).
+    protected def entry_callback : (String, T) ->
+      @entry_callback || ->(_event : String, _context : T) { }
     end
   end
 end

@@ -43,16 +43,49 @@ module FSM
       @states[id]?
     end
 
-    # Resolve the transition for an event from the current state (design section
-    # 10.2, steps 9-14). Single transition per event, matching today's logic;
-    # multiple transitions and the plan/apply split are design section 6-7 and
-    # land with fsmcr-bfn.3. Returns the selected transition and the destination
-    # definition, or nil and the unchanged definition when nothing matches.
-    protected def transition(event : String, current : StateDefinition(T)) : Tuple(Transition(T)?, StateDefinition(T))
-      return {nil, current} unless transition = current.transition(event)
-      return {nil, current} unless new_state = @states[transition.target]?
+    # The pure core (design section 7, section 10.2 steps 9-16, D7). Selects the
+    # transition, evaluates guards, resolves the destination, and computes the
+    # ordered action list. It executes nothing; the interpreter runs the actions.
+    #
+    # D7: protected. `plan`, Plan, Action, and ActionKind are internal, not public
+    # API. Both interpreters and the library's own specs reach it from inside the
+    # FSM namespace; a caller outside cannot.
+    protected def plan(state : StateDefinition(T), event : String, context : T) : Plan(T)
+      outcome : TransitionFound(T) | TransitionsBlocked | EventNotRecognized = state.resolve(event, context)
 
-      {transition, new_state}
+      case outcome
+      in TransitionFound
+        transition : Transition(T) = outcome.transition
+        # The target is validated at build (design section 4), so the lookup exists.
+        target : StateDefinition(T) = @states[transition.target]
+        Plan(T).new(outcome, target, transition_actions(state, transition, target))
+      in TransitionsBlocked
+        # Step 14: destination is the unchanged current state. Empty action list in
+        # this issue; the Blocked action needs an on_blocked handler (fsmcr-bfn.4,
+        # design section 10.2 step 15).
+        Plan(T).new(outcome, state, [] of Action(T))
+      in EventNotRecognized
+        # Step 14: destination is the unchanged current state. Empty action list in
+        # this issue; the UnknownEvent action needs an on_unknown_event handler
+        # (fsmcr-bfn.5, design section 10.2 step 15).
+        Plan(T).new(outcome, state, [] of Action(T))
+      end
+    end
+
+    # The ordered action list for a found transition (design section 10.2 step 15).
+    # External (the default) emits Exit(source), Transition, Entry(target); an
+    # internal self-transition suppresses Exit and Entry and emits Transition only
+    # (design section 9.1). Decision A: the Transition action carries the target
+    # state id; the design fixes the kind order but leaves the middle action's
+    # state_id to the implementer.
+    private def transition_actions(source : StateDefinition(T), transition : Transition(T), target : StateDefinition(T)) : Array(Action(T))
+      return [Action(T).new(ActionKind::Transition, target.id, transition.callback)] if transition.internal?
+
+      [
+        Action(T).new(ActionKind::Exit, source.id, source.exit_callback),
+        Action(T).new(ActionKind::Transition, target.id, transition.callback),
+        Action(T).new(ActionKind::Entry, target.id, target.entry_callback),
+      ]
     end
   end
 end
