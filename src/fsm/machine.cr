@@ -1,88 +1,58 @@
 module FSM
-  # Represents a finite state machine.
+  # The immutable, sealed machine definition (design section 1, section 5).
   #
-  # @property id [String] The unique identifier of the state machine.
-  # @property states [Hash(String, State)] A collection of states associated with the state machine.
-  # @property initial_state [State] The initial state of the state machine.
-  # @property current_state [State] The current state of the state machine.
-  class Machine
-    # The unique identifier of the state machine.
+  # A machine is built once by a machine-scoped builder, then shared across any
+  # number of interpreters and fibers. It resolves transitions and answers state
+  # lookups; it never executes user callbacks (design section 10.6). Construction
+  # goes only through `build`; the old array-of-states `Machine.create` form is
+  # gone (design section 4, D2).
+  #
+  # T is the caller's context type. T = Nil is unsupported: a contextless caller
+  # uses FSM::Context (design section 3.1, D5). `build` rejects Machine(Nil) at
+  # compile time with a diagnostic naming FSM::Context.
+  class Machine(T)
     getter id : String
 
-    # A collection of states associated with the state machine.
-    @states : Hash(String, State)
+    @states : Hash(String, StateDefinition(T))
 
-    # A shallow copy of the states associated with the state machine.
-    #
-    # Returns a duplicate so callers cannot add, delete, or replace entries in
-    # the machine's internal definition. The State values are shared but sealed,
-    # so the definition stays immutable. Internal code reads @states directly to
-    # avoid copying on the transition hot path.
-    def states : Hash(String, State)
+    protected def initialize(@id : String, @states : Hash(String, StateDefinition(T)))
+    end
+
+    # Build a machine with a machine-scoped builder (design section 4, D2). The
+    # yielded builder registers states; at the end of the block it validates every
+    # transition target and seals every definition, then returns the immutable
+    # machine.
+    def self.build(id : String, &) : Machine(T)
+      {% if T == Nil %}
+        {% raise "Machine(Nil) is unsupported: T = Nil has no context object. Use FSM::Context as T for a contextless machine (design section 3.1, D5)." %}
+      {% end %}
+      builder : Builder(T) = Builder(T).new(id)
+      yield builder
+      builder.finish
+    end
+
+    # A shallow copy of the states, so callers cannot add, delete, or replace
+    # entries in the machine's internal definition (design section 5). The
+    # StateDefinition values are shared but sealed, so the definition stays
+    # immutable. Internal code reads @states directly.
+    def states : Hash(String, StateDefinition(T))
       @states.dup
     end
 
-    # Create a new state machine with the given identifier, states, and initial state.
-    #
-    # @param id [String] The unique identifier of the state machine.
-    # @param states [Array(State)] The states associated with the state machine.
-    # @param context [Hash(String, Any)] Optional initial data to be registered in the context.
-    # @yieldparam self [Machine] The machine instance to be configured.
-    def self.create(id : String, states : Array(State))
-      states_hash = states.map { |x| {x.id, x} }.to_h
-      check_states(states_hash)
-      states.each(&.seal)
-      new(id, states_hash)
-    end
-
-    # Create a new state machine with the given identifier, states, initial state, and execute a block to set up additional configurations.
-    #
-    # @param id [String] The unique identifier of the state machine.
-    # @param states [Array(State)] The states associated with the state machine.
-    # @param context [Hash(String, Any)] Optional initial data to be registered in the context.
-    # @yieldparam self [Machine] The machine instance to be configured.
-    def self.create(id : String, states : Array(State), &)
-      machine = create(id, states)
-      machine = yield machine || machine
-    end
-
-    # Initialize a new state machine with the given identifier, states, and initial state.
-    #
-    private def initialize(@id, @states); end
-
-    protected def state_by_id(id : String)
+    protected def state_by_id(id : String) : StateDefinition(T)?
       @states[id]?
     end
 
-    # Static method to handle state transitions.
-    #
-    # @param states [Hash(String, State)] The states associated with the state machine.
-    # @param current_state [State] The current state of the state machine.
-    # @param event [String] The event triggering the transition.
-    # @return [Tuple(Transition, State)] The transition and the new state after the transition.
-    protected def transition(event : String, current_state : State)
-      # No transition made if current state received is unrecognized.
-      return {nil, current_state} unless state = @states[current_state.id]?
-
-      # No transition made if the event received is not registered for the current_state
-      return {nil, current_state} unless transition = state.transition(event)
-
-      # No transition made if the target defined on the transition doesn't exist
-      return {nil, current_state} unless new_state = @states[transition.target]?
+    # Resolve the transition for an event from the current state (design section
+    # 10.2, steps 9-14). Single transition per event, matching today's logic;
+    # multiple transitions and the plan/apply split are design section 6-7 and
+    # land with fsmcr-bfn.3. Returns the selected transition and the destination
+    # definition, or nil and the unchanged definition when nothing matches.
+    protected def transition(event : String, current : StateDefinition(T)) : Tuple(Transition(T)?, StateDefinition(T))
+      return {nil, current} unless transition = current.transition(event)
+      return {nil, current} unless new_state = @states[transition.target]?
 
       {transition, new_state}
-    end
-
-    # Validate that the initial state is present in the states collection and has valid target states.
-    #
-    # @param states_hash [Hash(String, State)] The states associated with the state machine.
-    # @param initial [String] The identifier of the initial state.
-    # @raise [InvalidInitialStateError] Raised if the initial state is not present or has invalid target states.
-    private def self.check_states(states_by_id : Hash(String, State))
-      states_by_id.each do |id, state|
-        missing_states = state.all_target_states - states_by_id.keys
-        raise MissingTargetStateError.new "Invalid target state(s) found in #{id} transitions.  Invalid target(s) found: #{missing_states} " if missing_states.present?
-      end
     end
   end
 end

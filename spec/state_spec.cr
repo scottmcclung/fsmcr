@@ -1,77 +1,63 @@
 require "./spec_helper"
 
-describe FSM::State do
-  # A State is a class, so `Array#each` yields the shared object. Registering a
-  # callback while iterating writes to the state stored in the array, and the
-  # callback fires during a transition. These specs register entry and exit
-  # callbacks through iteration and assert they actually fire.
-  context "callbacks registered while iterating the states array" do
-    it "fires an on_entry callback registered while iterating the states array" do
-      entry_called : Bool = false
+# Transition(T) is a class (design section 5, D16). Its mutable surface is exactly
+# `on` and `guard`; `event` and `target` are set at construction and never change.
+# Because it is a class, the builder mutates one shared object rather than a copy,
+# so a guard or callback registered on the yielded transition during build is the
+# same registration the interpreter reads at runtime. These specs cover that
+# behaviorally through the interpreter.
+describe FSM::Transition do
+  it "exposes the event and target it was constructed with" do
+    captured : FSM::Transition(TurnContext)? = nil
 
-      states : Array(FSM::State) = [
-        FSM::State.create("state1").on_event("go", "state2"),
-        FSM::State.create("state2"),
-      ]
-
-      states.each do |state|
-        if state.id == "state2"
-          state.on_entry { |event, context| entry_called = true }
-        end
+    FSM::Machine(TurnContext).build("world") do |m|
+      m.state("cave") do |s|
+        s.on_event("north", "clearing") { |t| captured = t }
       end
-
-      machine : FSM::Machine = FSM::Machine.create("test_machine", states)
-      service : FSM::Service = FSM::Service.interpret(machine, "state1")
-
-      service.send("go")
-
-      entry_called.should be_true
+      m.state("clearing") { |s| }
     end
 
-    it "fires an on_exit callback registered while iterating the states array" do
-      exit_called : Bool = false
-
-      states : Array(FSM::State) = [
-        FSM::State.create("state1").on_event("go", "state2"),
-        FSM::State.create("state2"),
-      ]
-
-      states.each do |state|
-        if state.id == "state1"
-          state.on_exit { |event, context| exit_called = true }
-        end
-      end
-
-      machine : FSM::Machine = FSM::Machine.create("test_machine", states)
-      service : FSM::Service = FSM::Service.interpret(machine, "state1")
-
-      service.send("go")
-
-      exit_called.should be_true
+    if transition = captured
+      transition.event.should eq "north"
+      transition.target.should eq "clearing"
+    else
+      fail "expected the builder to yield the transition"
     end
   end
 
-  # State.create(id) { |s| ... } must always return a State, no matter what the
-  # block's final expression evaluates to. The block's last expression is
-  # deliberately not the state.
-  context "block form of State.create" do
-    it "returns the State when the block's last expression is a String" do
-      state : FSM::State = FSM::State.create("state1") do |s|
-        s.on_event("go", "state2")
-        "not a state"
-      end
+  it "carries a guard registered on the shared object into the interpreter, blocking when it rejects" do
+    ctx : TurnContext = TurnContext.new(rope_secured: false)
 
-      state.should be_a(FSM::State)
-      state.id.should eq "state1"
+    machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
+      m.state("cave") do |s|
+        s.on_event("north", "clearing") do |t|
+          t.guard { |_event, c| c.rope_secured }
+        end
+      end
+      m.state("clearing") { |s| }
     end
 
-    it "returns the State when the block's last expression is nil" do
-      state : FSM::State = FSM::State.create("state2") do |s|
-        nil
-      end
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
+    service.send("north")
 
-      state.should be_a(FSM::State)
-      state.id.should eq "state2"
+    service.current_state.should eq "cave"
+  end
+
+  it "carries a guard registered on the shared object into the interpreter, passing when it accepts" do
+    ctx : TurnContext = TurnContext.new(rope_secured: true)
+
+    machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
+      m.state("cave") do |s|
+        s.on_event("north", "clearing") do |t|
+          t.guard { |_event, c| c.rope_secured }
+        end
+      end
+      m.state("clearing") { |s| }
     end
+
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
+    service.send("north")
+
+    service.current_state.should eq "clearing"
   end
 end

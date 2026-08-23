@@ -1,50 +1,58 @@
 module FSM
-  # Represents a transition from one state to another triggered by an event.
+  # A transition from one state to another on an event (design section 5, D16).
   #
-  # @property event [String] The event that triggers the transition.
-  # @property target [String] The target state after the transition.
-  # @property callbacks [Callable(String, Context)?] Optional callback to be executed during the transition.
-  struct Transition
-    # Optional callback to be executed during the transition.
-    @callbacks : Nil | (String, Context) ->
-
-    # Optional guard predicate that must return true for the transition to proceed.
-    @guards : Nil | (String, Context) -> Bool
-
-    # The event that triggers the transition.
+  # Transition(T) is a class, not a struct, with the same lifecycle as
+  # StateDefinition: the builder creates it, mutates it during build via `on` and
+  # `guard`, and it is read-only forever afterward while shared across every
+  # interpreter. Making it a class means the builder mutates one shared object
+  # rather than a copy, which is why registering a guard and a callback on the
+  # yielded transition takes effect (design section 5). `event` and `target` are
+  # set at construction and never change; the only mutable surface is `on` and
+  # `guard`, which raise SealedStateError once the machine seals it.
+  class Transition(T)
     getter event : String
-
-    # The target state after the transition.
     getter target : String
 
-    protected def initialize(@event, @target); end
+    @callback : ((String, T) ->)? = nil
+    @guard : ((String, T) -> Bool)? = nil
 
-    protected def initialize(@event, @target, &block : (String, Context) ->)
-      @callbacks = block
+    # Whether the owning machine has sealed this transition (design section 5).
+    @sealed : Bool = false
+
+    protected def initialize(@event : String, @target : String)
     end
 
-    # Execute any callbacks registered to be fired during the transition.
-    #
-    # @param event [String] The event triggering the transition.
-    # @param context [Context] The context associated with the state machine.
-    protected def run_callbacks(event, context)
-      @callbacks.try &.call(event, context)
+    # Register the transition callback fired during the transition (design section
+    # 9).
+    def on(&block : (String, T) ->) : self
+      raise SealedStateError.new "Cannot register a transition callback on the #{@event} transition after it has been sealed by a machine." if @sealed
+      @callback = block
+      self
     end
 
-    protected def can_transition?(event : String, context : Context) : Bool
-      guard : Nil | (String, Context) -> Bool = @guards
+    # Register the guard predicate that must return true for this transition to be
+    # selected (design section 6).
+    def guard(&block : (String, T) -> Bool) : self
+      raise SealedStateError.new "Cannot register a guard on the #{@event} transition after it has been sealed by a machine." if @sealed
+      @guard = block
+      self
+    end
+
+    # Whether this transition's guard passes in the given context. A transition
+    # without a guard always passes (design section 6, step 12-13).
+    protected def passes_guard?(event : String, context : T) : Bool
+      guard : ((String, T) -> Bool)? = @guard
       return true if guard.nil?
       guard.call(event, context)
     end
 
-    def on(&block : (String, Context) ->) : self
-      @callbacks = block
-      self
+    protected def run_callback(event : String, context : T) : Nil
+      @callback.try &.call(event, context)
     end
 
-    def guard(&block : (String, Context) -> Bool) : self
-      @guards = block
-      self
+    # Seal this transition (design section 5). Idempotent.
+    protected def seal : Nil
+      @sealed = true
     end
   end
 end

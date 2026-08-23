@@ -1,71 +1,96 @@
 require "./spec_helper"
 
-# Group 3: sealing after build.
+# Sealing after build (design section 5, D13 and D16). Ported from the fsmcr-65b
+# sealing coverage onto the new construction API and names.
 #
-# Once Machine.create consumes a state, the definition is shared and must not be
-# mutable. Calling a builder method on a consumed state, or on a state handed
-# back by Service#send, must raise. Sealing is idempotent: the same states array
-# may build more than one machine.
+# After `Machine(T).build` returns, every StateDefinition(T) and every
+# Transition(T) it owns is sealed and shared, so mutating them must raise
+# SealedStateError. A sealed StateDefinition is reached through `Machine#states`
+# (its values are the shared sealed objects, not copies). A sealed Transition is
+# reached by capturing the object the builder yields, which is the same object the
+# machine keeps because Transition(T) is a class (design section 5, D16).
 describe "machine sealing" do
-  it "raises when on_event is called on a state after the machine consumes it" do
-    state : FSM::State = FSM::State.create("state1")
-    FSM::Machine.create("test_machine", [state])
+  it "raises when on_event is called on a sealed StateDefinition" do
+    machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("test_machine") do |m|
+      m.state("state1") { |s| s.on_event("go", "state1") }
+    end
+
+    sealed : FSM::StateDefinition(FSM::Context) = machine.states["state1"]
 
     expect_raises(FSM::SealedStateError) do
-      state.on_event("go", "state1")
+      sealed.on_event("go", "state1")
     end
   end
 
-  it "raises when the block form of on_event is called on a state after the machine consumes it" do
-    state : FSM::State = FSM::State.create("state1")
-    FSM::Machine.create("test_machine", [state])
+  it "raises when the block form of on_event is called on a sealed StateDefinition" do
+    machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("test_machine") do |m|
+      m.state("state1") { |s| s.on_event("go", "state1") }
+    end
+
+    sealed : FSM::StateDefinition(FSM::Context) = machine.states["state1"]
 
     expect_raises(FSM::SealedStateError) do
-      state.on_event("go", "state1") { |transition| transition }
+      sealed.on_event("go", "state1") { |t| }
     end
   end
 
-  it "raises when on_entry is called on a state after the machine consumes it" do
-    state : FSM::State = FSM::State.create("state1")
-    FSM::Machine.create("test_machine", [state])
+  it "raises when on_entry is called on a sealed StateDefinition" do
+    machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("test_machine") do |m|
+      m.state("state1") { |s| }
+    end
+
+    sealed : FSM::StateDefinition(FSM::Context) = machine.states["state1"]
 
     expect_raises(FSM::SealedStateError) do
-      state.on_entry { |event, context| }
+      sealed.on_entry { |_event, _context| }
     end
   end
 
-  it "raises when on_exit is called on a state after the machine consumes it" do
-    state : FSM::State = FSM::State.create("state1")
-    FSM::Machine.create("test_machine", [state])
+  it "raises when on_exit is called on a sealed StateDefinition" do
+    machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("test_machine") do |m|
+      m.state("state1") { |s| }
+    end
+
+    sealed : FSM::StateDefinition(FSM::Context) = machine.states["state1"]
 
     expect_raises(FSM::SealedStateError) do
-      state.on_exit { |event, context| }
+      sealed.on_exit { |_event, _context| }
     end
   end
 
-  it "does not allow mutating the machine through a State returned by Service#send" do
-    state1 : FSM::State = FSM::State.create("state1").on_event("go", "state2")
-    state2 : FSM::State = FSM::State.create("state2")
+  it "raises when Transition#on is called after the machine seals the transition" do
+    captured : FSM::Transition(FSM::Context)? = nil
 
-    machine : FSM::Machine = FSM::Machine.create("test_machine", [state1, state2])
-    service : FSM::Service = FSM::Service.interpret(machine, "state1")
+    FSM::Machine(FSM::Context).build("test_machine") do |m|
+      m.state("state1") do |s|
+        s.on_event("go", "state1") { |t| captured = t }
+      end
+    end
 
-    returned : FSM::State = service.send("go")
-
-    expect_raises(FSM::SealedStateError) do
-      returned.on_event("other", "state1")
+    if transition = captured
+      expect_raises(FSM::SealedStateError) do
+        transition.on { |_event, _context| }
+      end
+    else
+      fail "expected the builder to yield the transition"
     end
   end
 
-  it "seals idempotently so the same states array can build a second machine" do
-    states : Array(FSM::State) = [
-      FSM::State.create("state1").on_event("go", "state2"),
-      FSM::State.create("state2"),
-    ]
+  it "raises when Transition#guard is called after the machine seals the transition" do
+    captured : FSM::Transition(FSM::Context)? = nil
 
-    FSM::Machine.create("machine_a", states)
-    second : FSM::Machine = FSM::Machine.create("machine_b", states)
+    FSM::Machine(FSM::Context).build("test_machine") do |m|
+      m.state("state1") do |s|
+        s.on_event("go", "state1") { |t| captured = t }
+      end
+    end
 
-    second.should be_a(FSM::Machine)
+    if transition = captured
+      expect_raises(FSM::SealedStateError) do
+        transition.guard { |_event, _context| true }
+      end
+    else
+      fail "expected the builder to yield the transition"
+    end
   end
 end

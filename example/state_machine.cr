@@ -1,58 +1,48 @@
 require "../src/fsm"
 
-id = "something from here"
-current = "some state"
-
-states = [
-  FSM::State.create("red")
-    .on_event("change", target: "green") do |transition|
-      transition.on { |e, c| p "Transition: Red -> Green" }
-      transition.guard { |event, context| true }
+# A stop-light machine, built once and then interpreted (design section 4,
+# section 8.1). T is FSM::Context, the hash-and-mutex bucket the library ships
+# for a caller with no domain object of its own (design section 3.1, D5).
+machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("stop_light") do |m|
+  m.state("red") do |s|
+    s.on_entry { |_event, _ctx| puts "Entry: red" }
+    s.on_exit { |_event, _ctx| puts "Exit: red" }
+    s.on_event("change", "green") do |t|
+      t.on { |_event, _ctx| puts "Transition: red -> green" }
     end
-    .on_event("error", target: "error")
-    .on_entry { |e, c| p "Entry: red" }
-    .on_exit { |e, c| p "Exit: red" },
-
-  FSM::State.create("yellow")
-    .on_event("change", target: "red") do |transition|
-      transition.on { |event, context| p "Transition: Yellow -> Red" }
-      transition.guard { |event, context| true }
-    end
-    .on_event("error", target: "error")
-    .on_entry { |e, c| p "Entry: yellow" }
-    .on_exit { |e, c| p "Exit: yellow" },
-
-  FSM::State.create("green")
-    .on_event("change", target: "yellow") do |transition|
-      transition.on { |event, context| p "Transition: Green -> Yellow" }
-      transition.guard { |event, context| true }
-    end
-    .on_event("error", target: "error")
-    .on_entry { |e, c| p "Entry: green" }
-    .on_exit { |e, c| p "Exit: green" },
-]
-
-state = FSM::State.create("error")
-  .on_event("reset", target: "red") do |transition|
-    transition.on { |event, context| p "Transition: Error -> Red" }
-    transition.guard { |event, context| true }
   end
-  .on_entry { |e, c| p "Entry: error mode" }
-  .on_exit { |e, c| p "Exit: error mode" }
 
-states.push(state)
+  m.state("green") do |s|
+    s.on_entry { |_event, _ctx| puts "Entry: green" }
+    s.on_exit { |_event, _ctx| puts "Exit: green" }
+    s.on_event("change", "yellow") do |t|
+      t.on { |_event, _ctx| puts "Transition: green -> yellow" }
+    end
+  end
 
-machine = FSM::Machine.create(id: "stop_light", states: states)
+  m.state("yellow") do |s|
+    s.on_entry { |_event, _ctx| puts "Entry: yellow" }
+    s.on_exit { |_event, _ctx| puts "Exit: yellow" }
+    s.on_event("change", "red") do |t|
+      t.on { |_event, _ctx| puts "Transition: yellow -> red" }
+    end
+  end
+end
 
-# machine = FSM::Machine.create()
-service = FSM::Service.interpret(machine, initial_state: "red") # machine is struct
+# Interpret the sealed machine from an initial state (design section 8.1,
+# section 10.2). The machine is immutable and shareable; the service holds this
+# run's current state and context.
+context : FSM::Context = FSM::Context.new
+service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "red", context)
 
-# Can register new transition callbacks with the service, but the machine and the states are immutable.
-service.on_transition { |state| p "State changed to: #{state.id}" }
-service.matches?("red") # => true
+# An observer fired only when a transition actually occurred (design section 9).
+service.on_transition { |state| puts "State changed to: #{state.id}" }
 
-p service.current_state # => "red"
+puts "matches?(\"red\"): #{service.matches?("red")}"
+puts "current_state: #{service.current_state}"
 
-p service.send("change").id # red -> green
-p service.send("change").id # green -> yellow
-p service.send("change").id # yellow -> red
+# Each send blocks, applies the actions, and returns the resulting snapshot
+# (design section 10.3).
+puts "send(\"change\").id => #{service.send("change").id}" # red -> green
+puts "send(\"change\").id => #{service.send("change").id}" # green -> yellow
+puts "send(\"change\").id => #{service.send("change").id}" # yellow -> red
