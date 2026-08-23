@@ -23,6 +23,8 @@ module FSM
   # current state id and `matches?` compares against it, preserving today's
   # observable position contract.
   class Service(T)
+    include ObserverFiring
+
     @machine : Machine(T)
     @context : T
     # D18: the cached snapshot is the sole record of where the interpreter is.
@@ -102,14 +104,26 @@ module FSM
         # The snapshot id always came from the machine, so the definition exists.
         return @state unless definition
 
-        # Steps 9-16: the pure core decides; it runs nothing.
-        plan : Plan(T) = @machine.plan(definition, event, @context)
-
-        # Step 17: run each action in order. The only place user callback code runs.
-        # A blocked or unrecognized event has an empty action list in this issue, so
-        # nothing runs (design section 10.2 step 15).
+        # Steps 9-19: the pure core decides and the interpreter applies. plan is
+        # inside this rescue because guards run inside plan (design section 10.2 step
+        # 12) and planning is part of the step, so a guard that raises must surface as
+        # a Failed snapshot on the returning path exactly like a raising callback
+        # (design section 11: "where a value comes back, failure is in the value"). If
+        # plan were called outside the rescue, a raising guard would propagate raw
+        # instead of being enveloped.
+        #
+        # Widening the rescue over plan is deliberate. Guards are user code that runs
+        # inside plan, and per design section 11 the library does not distinguish a
+        # raising guard from a library defect inside plan: both surface as a Failed
+        # snapshot on the returning path.
         transitioned : Bool = false
         begin
+          # Steps 9-16: the pure core decides; it runs nothing.
+          plan : Plan(T) = @machine.plan(definition, event, @context)
+
+          # Step 17: run each action in order. The only place user callback code runs.
+          # A blocked or unrecognized event has an empty action list in this issue, so
+          # nothing runs (design section 10.2 step 15).
           plan.actions.each(&.callback.call(event, @context))
 
           # Step 18: commit by replacing the cached snapshot (D18). next_state is
@@ -117,54 +131,35 @@ module FSM
           @state = State.new(id: plan.next_state.id, status: Status::Success, error: nil)
           transitioned = plan.outcome.is_a?(TransitionFound)
         rescue ex
-          # Step 19: a callback raised, so the commit is never reached and the state
-          # pointer stays where it was (design section 11). The snapshot records the
-          # unchanged id, Failed, and the exception that stopped the step.
+          # Step 19: a guard or callback raised, so the commit is never reached and the
+          # state pointer stays where it was (design section 11). The snapshot records
+          # the unchanged id, Failed, and the exception that stopped the step.
           @state = State.new(id: @state.id, status: Status::Failed, error: ex)
         end
 
         # Step 20: fire the observers copied from the ObserverRegistrar at
-        # construction (design section 9, D19). on_transition fires only when a
-        # transition actually completed; a blocked, unrecognized, or failed step
-        # does not fire it. on_event_processed fires after every step and receives
-        # the snapshot step 18 or 19 produced. on_transition runs first on success.
+        # construction (design section 9, D19). fire_observers returns the first
+        # observer exception, or nil.
         #
         # Warning: both observers run here while @transition_mutex is held, so
         # calling send from an observer re-enters the mutex and raises a
         # recursive-lock error. Cascading events by queueing and draining after
         # commit is a separate, unbuilt feature; today an observer must not call send.
-        @on_transition.try(&.call(@state)) if transitioned
-        fire_event_processed(@state)
+        observer_error : Exception? = fire_observers(@state, transitioned)
+
+        # Re-raise the first observer exception to the caller. Service is synchronous:
+        # the calling fiber is present to receive the raise, and Service has no
+        # lifecycle to poison (design section 9, section 11). This is the deliberate
+        # divergence from AsyncService, which records the observer exception in its
+        # lifecycle and returns the snapshot because no calling fiber is waiting on the
+        # owning fiber (design section 8.2, section 11). The re-raise unwinds through
+        # synchronize's ensure, which releases @transition_mutex, so the lock covers
+        # only interpreter state and a raising observer never leaves it held (design
+        # section 12). The transition already committed at step 18, so the raise does
+        # not undo it.
+        raise observer_error if observer_error
 
         @state
-      end
-    end
-
-    # Fire the after-every-step observer with the snapshot the step produced. The
-    # two branches are asymmetric on what happens when the observer itself raises.
-    #
-    # On a failed step the snapshot already carries the first exception (design
-    # section 9), so an observer that raises must not replace it and must not turn
-    # the returning path into a raise (design section 11): the observer's exception
-    # is discarded and the first recorded exception wins. The bare rescue discards
-    # it with no logging or trace; that silence is deliberate (design section 9).
-    #
-    # On a non-failed step (status Success, covering a successful transition, a
-    # blocked event, and an unknown event) there is no recorded exception, so the
-    # observer runs unguarded and an exception it raises propagates out of send,
-    # consistent with on_transition's pre-existing behavior.
-    private def fire_event_processed(snapshot : State) : Nil
-      handler : (State ->)? = @on_event_processed
-      return unless handler
-
-      if snapshot.status.failed?
-        begin
-          handler.call(snapshot)
-        rescue
-          # The observer's own exception is discarded, not logged (design section 9).
-        end
-      else
-        handler.call(snapshot)
       end
     end
   end

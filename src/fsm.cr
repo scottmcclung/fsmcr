@@ -1,3 +1,8 @@
+# ObserverFiring is included by both interpreters, so it must be defined before the
+# glob reaches them: Crystal resolves `include` in require order (async_service.cr
+# sorts ahead of observer_firing.cr). require is idempotent, so the glob re-require
+# below is a no-op.
+require "./fsm/observer_firing"
 require "./fsm/*"
 
 # The Finite State Machine (FSM) module provides a framework for modeling and implementing finite state machines.
