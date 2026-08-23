@@ -31,12 +31,14 @@ end
 
 # Interpret the sealed machine from an initial state (design section 8.1,
 # section 10.2). The machine is immutable and shareable; the service holds this
-# run's current state and context.
+# run's current state and context. Observers are registered through the builder
+# block, which receives an ObserverRegistrar and seals it before interpret
+# returns, so the live service's observers cannot be rewritten (design section 9).
 context : FSM::Context = FSM::Context.new
-service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "red", context)
-
-# An observer fired only when a transition actually occurred (design section 9).
-service.on_transition { |state| puts "State changed to: #{state.id}" }
+service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "red", context) do |observers|
+  # An observer fired only when a transition actually occurred (design section 9).
+  observers.on_transition { |state| puts "State changed to: #{state.id}" }
+end
 
 puts "matches?(\"red\"): #{service.matches?("red")}"
 puts "current_state: #{service.current_state}"

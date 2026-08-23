@@ -22,8 +22,10 @@ require "./spec_helper"
 # already recorded in the snapshot (design section 9): the observer's own exception
 # does not replace the callback exception the snapshot already carries.
 #
-# Registration mirrors on_transition (src/fsm/service.cr): a single slot where the
-# latest registration replaces the previous handler, returning self for chaining.
+# Observers are registered through the builder block interpret yields, which hands the
+# block an ObserverRegistrar (src/fsm/observer_registrar.cr). The handlers are copied
+# once into the service and the registrar is sealed before interpret returns, so a
+# live service has no observer setter (design section 5).
 describe "on_event_processed" do
   it "fires after a successful transition, receiving the new-state snapshot" do
     ctx : TurnContext = TurnContext.new
@@ -34,10 +36,11 @@ describe "on_event_processed" do
       m.state("clearing") { |s| }
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
     # The call-site block parameter is left bare; Crystal rejects a type annotation
     # there. The captured value is typed as FSM::State? above.
-    service.on_event_processed { |snapshot| captured = snapshot }
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
+      observers.on_event_processed { |snapshot| captured = snapshot }
+    end
 
     service.send("north")
 
@@ -62,8 +65,9 @@ describe "on_event_processed" do
       m.state("clearing") { |s| }
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-    service.on_event_processed { |snapshot| captured = snapshot }
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
+      observers.on_event_processed { |snapshot| captured = snapshot }
+    end
 
     service.send("north")
 
@@ -88,8 +92,9 @@ describe "on_event_processed" do
       m.state("clearing") { |s| }
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-    service.on_event_processed { |snapshot| captured = snapshot }
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
+      observers.on_event_processed { |snapshot| captured = snapshot }
+    end
 
     service.send("xyzzy")
 
@@ -114,8 +119,9 @@ describe "on_event_processed" do
       m.state("clearing") { |s| }
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-    service.on_event_processed { |_snapshot| fire_count += 1 }
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
+      observers.on_event_processed { |_snapshot| fire_count += 1 }
+    end
 
     service.send("north") # blocked: guard rejects while rope is not secured
     service.send("xyzzy") # unknown: no transition registered for this event
@@ -140,9 +146,10 @@ describe "on_event_processed" do
       m.state("clearing") { |s| }
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-    service.on_transition { |_snapshot| transition_fired = true }
-    service.on_event_processed { |_snapshot| processed_fired = true }
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
+      observers.on_transition { |_snapshot| transition_fired = true }
+      observers.on_event_processed { |_snapshot| processed_fired = true }
+    end
 
     service.send("north")
 
@@ -165,9 +172,10 @@ describe "on_event_processed" do
       m.state("clearing") { |s| }
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-    service.on_transition { |_snapshot| transition_fired = true }
-    service.on_event_processed { |_snapshot| processed_fired = true }
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
+      observers.on_transition { |_snapshot| transition_fired = true }
+      observers.on_event_processed { |_snapshot| processed_fired = true }
+    end
 
     service.send("xyzzy")
 
@@ -184,51 +192,17 @@ describe "on_event_processed" do
       m.state("clearing") { |s| }
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-    # Registered on_event_processed first to show the firing order is fixed by the
-    # step-20 sequence (on_transition, then on_event_processed), not by registration
-    # order (design section 10.3 step 20).
-    service.on_event_processed { |_snapshot| order << "processed" }
-    service.on_transition { |_snapshot| order << "transition" }
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
+      # Registered on_event_processed first to show the firing order is fixed by the
+      # step-20 sequence (on_transition, then on_event_processed), not by registration
+      # order (design section 10.3 step 20).
+      observers.on_event_processed { |_snapshot| order << "processed" }
+      observers.on_transition { |_snapshot| order << "transition" }
+    end
 
     service.send("north")
 
     order.should eq ["transition", "processed"]
-  end
-
-  it "replaces the previous handler when registered again, mirroring on_transition" do
-    ctx : TurnContext = TurnContext.new
-    first_fired : Bool = false
-    second_fired : Bool = false
-
-    machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
-      m.state("cave") { |s| s.on_event("north", "clearing") }
-      m.state("clearing") { |s| }
-    end
-
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-    # Single-slot registration, like on_transition (src/fsm/service.cr): the latest
-    # registration replaces the previous handler.
-    service.on_event_processed { |_snapshot| first_fired = true }
-    service.on_event_processed { |_snapshot| second_fired = true }
-
-    service.send("north")
-
-    first_fired.should be_false
-    second_fired.should be_true
-  end
-
-  it "returns self from on_event_processed so registration chains, mirroring on_transition" do
-    ctx : TurnContext = TurnContext.new
-
-    machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
-      m.state("cave") { |s| s.on_event("north", "clearing") }
-      m.state("clearing") { |s| }
-    end
-
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-
-    service.on_event_processed { |_snapshot| }.should be(service)
   end
 
   it "fires on_event_processed with the Failed snapshot on a failed step, and not on_transition" do
@@ -246,9 +220,10 @@ describe "on_event_processed" do
       end
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-    service.on_transition { |_snapshot| transition_fired = true }
-    service.on_event_processed { |snapshot| captured = snapshot }
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
+      observers.on_transition { |_snapshot| transition_fired = true }
+      observers.on_event_processed { |snapshot| captured = snapshot }
+    end
 
     # The returning path surfaces failure as a value, not a raise (design section 11).
     result : FSM::State = service.send("north")
@@ -285,16 +260,17 @@ describe "on_event_processed" do
       end
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-    service.on_transition { |_snapshot| transition_fired = true }
-    # The observer captures the snapshot it was handed, then raises. Per design
-    # section 9 the first exception (the callback's) is the one already recorded in
-    # the snapshot, so the observer's own exception must not replace it, and the
-    # returning path must still hand back the Failed value rather than raising
-    # observer_error (design section 11).
-    service.on_event_processed do |snapshot|
-      captured = snapshot
-      raise observer_error
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
+      observers.on_transition { |_snapshot| transition_fired = true }
+      # The observer captures the snapshot it was handed, then raises. Per design
+      # section 9 the first exception (the callback's) is the one already recorded in
+      # the snapshot, so the observer's own exception must not replace it, and the
+      # returning path must still hand back the Failed value rather than raising
+      # observer_error (design section 11).
+      observers.on_event_processed do |snapshot|
+        captured = snapshot
+        raise observer_error
+      end
     end
 
     result : FSM::State = service.send("north")
@@ -326,14 +302,15 @@ describe "on_event_processed" do
       m.state("clearing") { |s| }
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-    # A blocked step is a successful transaction that moved nowhere (design section
-    # 3.3), so its snapshot status is Success. fire_event_processed runs the observer
-    # unguarded on a non-failed snapshot, so an exception it raises propagates out of
-    # send rather than being discarded. This asymmetry with the failed-step branch,
-    # which discards the observer's exception so the first recorded one wins (design
-    # section 9), is intentional and matches on_transition's pre-existing behavior.
-    service.on_event_processed { |_snapshot| raise observer_error }
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
+      # A blocked step is a successful transaction that moved nowhere (design section
+      # 3.3), so its snapshot status is Success. fire_event_processed runs the observer
+      # unguarded on a non-failed snapshot, so an exception it raises propagates out of
+      # send rather than being discarded. This asymmetry with the failed-step branch,
+      # which discards the observer's exception so the first recorded one wins (design
+      # section 9), is intentional and matches on_transition's pre-existing behavior.
+      observers.on_event_processed { |_snapshot| raise observer_error }
+    end
 
     expect_raises(Exception, "observer raised on blocked") do
       service.send("north")
@@ -357,9 +334,10 @@ describe "on_event_processed" do
       m.state("clearing") { |s| }
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
-    service.on_transition { |_snapshot| transition_fired = true }
-    service.on_event_processed { |snapshot| captured = snapshot }
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
+      observers.on_transition { |_snapshot| transition_fired = true }
+      observers.on_event_processed { |snapshot| captured = snapshot }
+    end
 
     # send's begin/rescue wraps every planned action, including the Blocked one, so the
     # raising handler surfaces as a Failed value rather than a raise (design section 11).

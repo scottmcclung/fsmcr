@@ -19,18 +19,53 @@ module FSM
     # D18: the cached snapshot is the sole record of where the interpreter is.
     @state : State
     @transition_mutex : Mutex = Mutex.new
-    @on_transition : (State ->)? = nil
-    @on_event_processed : (State ->)? = nil
+    # Observers are copied once from the ObserverRegistrar at construction and never
+    # rewritten afterward (design section 9, section 10.3 step 20, D19). There is no
+    # setter on a live service; a partially-built registrar is frozen when interpret
+    # returns, the same build-then-seal idiom the Machine and State builders use
+    # (design section 4, section 5).
+    @on_transition : (State ->)?
+    @on_event_processed : (State ->)?
 
-    protected def initialize(@machine : Machine(T), @state : State, @context : T)
+    protected def initialize(@machine : Machine(T), @state : State, @context : T, @on_transition : (State ->)? = nil, @on_event_processed : (State ->)? = nil)
     end
 
-    # Interpret the machine from an initial state (design section 10.2, steps 5-6).
-    # Validates the initial state against the sealed machine and builds the initial
-    # snapshot: the initial id, Success, and no error.
+    # Interpret the machine from an initial state, registering no observers (design
+    # section 10.2, steps 5-6). Validates the initial state against the sealed
+    # machine and builds the initial snapshot: the initial id, Success, and no error.
     def self.interpret(machine : Machine(T), initial_state : String, context : T) : Service(T)
+      new(machine, build_initial_state(machine, initial_state), context)
+    end
+
+    # Interpret the machine and register observers through a builder block (design
+    # section 10.2, section 9). The block receives an ObserverRegistrar; it registers
+    # on_transition and on_event_processed handlers into it. The handlers are copied
+    # once into this service and the registrar is sealed before interpret returns, so
+    # no caller can mutate observers on the live interpreter (design section 5). This
+    # mirrors how the Machine and State builders seal at the end of their block
+    # (design section 4).
+    def self.interpret(machine : Machine(T), initial_state : String, context : T, & : ObserverRegistrar ->) : Service(T)
+      initial : State = build_initial_state(machine, initial_state)
+      registrar : ObserverRegistrar = ObserverRegistrar.new
+      yield registrar
+      service : Service(T) = new(
+        machine,
+        initial,
+        context,
+        registrar.on_transition_handler,
+        registrar.on_event_processed_handler,
+      )
+      registrar.seal
+      service
+    end
+
+    # Validate the initial state against the sealed machine and build the initial
+    # snapshot both interpret overloads start from: the initial id, Success, and no
+    # error (design section 10.2, steps 5-6). Raises InvalidInitialStateError when the
+    # machine has no state with that id.
+    private def self.build_initial_state(machine : Machine(T), initial_state : String) : State
       raise InvalidInitialStateError.new "Expected states to include the initial state. A state with id #{initial_state} was not found." unless machine.state_by_id(initial_state)
-      new(machine, State.new(id: initial_state, status: Status::Success, error: nil), context)
+      State.new(id: initial_state, status: Status::Success, error: nil)
     end
 
     # The current state id (design section 8.1). Reads the cached snapshot's id.
@@ -46,30 +81,6 @@ module FSM
     # same torn-read reason as `current_state` (design section 12.3, point 2).
     def matches?(state_id : String) : Bool
       @transition_mutex.synchronize { @state.id == state_id }
-    end
-
-    # Register an observer fired only when a transition actually occurred (design
-    # section 9). The payload is the snapshot; its exact shape is settled under
-    # fsmcr-crj.
-    def on_transition(&block : State ->) : self
-      @on_transition = block
-      self
-    end
-
-    # Register an observer fired after every step, regardless of outcome: a
-    # successful transition, a guard-blocked event, an unknown event, or a failed
-    # step (design section 9, D19). The handler receives the snapshot the step
-    # produced (design section 10.3 step 20); it carries no outcome discrimination
-    # (D15). Single-slot like on_transition: the latest registration replaces the
-    # previous handler and self is returned so registration chains.
-    #
-    # Warning: the observer runs inside send while @transition_mutex is held, so
-    # calling send from the observer (or from on_transition) re-enters the mutex and
-    # raises a recursive-lock error. Cascading events by queueing and draining after
-    # commit is a separate, unbuilt feature; today the observer must not call send.
-    def on_event_processed(&block : State ->) : self
-      @on_event_processed = block
-      self
     end
 
     # Send an event, blocking until it is applied, and return the resulting
@@ -103,10 +114,16 @@ module FSM
           @state = State.new(id: @state.id, status: Status::Failed, error: ex)
         end
 
-        # Step 20: on_transition fires only when a transition actually completed
-        # (design section 9, D19); a blocked, unrecognized, or failed step does not
-        # fire it. on_event_processed fires after every step and receives the
-        # snapshot step 18 or 19 produced. on_transition runs first on success.
+        # Step 20: fire the observers copied from the ObserverRegistrar at
+        # construction (design section 9, D19). on_transition fires only when a
+        # transition actually completed; a blocked, unrecognized, or failed step
+        # does not fire it. on_event_processed fires after every step and receives
+        # the snapshot step 18 or 19 produced. on_transition runs first on success.
+        #
+        # Warning: both observers run here while @transition_mutex is held, so
+        # calling send from an observer re-enters the mutex and raises a
+        # recursive-lock error. Cascading events by queueing and draining after
+        # commit is a separate, unbuilt feature; today an observer must not call send.
         @on_transition.try(&.call(@state)) if transitioned
         fire_event_processed(@state)
 

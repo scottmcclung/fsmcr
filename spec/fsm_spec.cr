@@ -75,10 +75,11 @@ describe FSM::Service do
       m.state("state2") { |s| }
     end
 
-    service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "state1", FSM::Context.new)
     # The observer payload is fsmcr-crj's scope; this issue only asserts the
     # observer fires, so the yielded argument is intentionally not annotated.
-    service.on_transition { |_snapshot| observer_fired = true }
+    service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "state1", FSM::Context.new) do |observers|
+      observers.on_transition { |_snapshot| observer_fired = true }
+    end
 
     service.send("event1")
 
@@ -145,8 +146,9 @@ describe FSM::Service do
       end
     end
 
-    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "state1", ctx)
-    service.on_transition { |_snapshot| observer_fired = true }
+    service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "state1", ctx) do |observers|
+      observers.on_transition { |_snapshot| observer_fired = true }
+    end
 
     service.send("event1")
 
