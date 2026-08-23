@@ -136,6 +136,8 @@ module FSM
   # owning fiber, which is the one place structural enforcement of context isolation
   # is available. That absence is deliberate and is why no such method appears below.
   class AsyncService(T)
+    include ObserverFiring
+
     @machine : Machine(T)
     @context : T
     # The interpreter's only position field, mutated only by the owning fiber (D18).
@@ -415,6 +417,10 @@ module FSM
         # snapshot exactly like a raising callback, and the commit is never reached
         # (design section 11). If plan were called outside this rescue, a raising
         # guard would escape the owning fiber, kill it, and hang every waiting caller.
+        # Widening the rescue over plan is deliberate. Guards are user code that runs
+        # inside plan, and per design section 11 the library does not distinguish a
+        # raising guard from a library defect inside plan: both surface as a Failed
+        # snapshot on the returning path.
         plan : Plan(T) = @machine.plan(definition, event, @context)
         plan.actions.each(&.callback.call(event, @context))
         @state = State.new(id: plan.next_state.id, status: Status::Success, error: nil)
@@ -426,53 +432,6 @@ module FSM
       end
 
       {@state, transitioned}
-    end
-
-    # Fire the step's observers (design section 9, section 10.3 step 20, D19). On a
-    # non-failed step on_transition fires first (only when a transition completed),
-    # then on_event_processed. Each fires in its own rescue so an on_transition that
-    # raises never skips on_event_processed: section 9 guarantees on_event_processed
-    # fires after every step. The FIRST exception raised is captured and returned so
-    # the caller can poison the async service; a later observer's exception is
-    # discarded. On a failed step on_transition does not fire and on_event_processed's
-    # own exception is discarded, keeping the first recorded exception authoritative
-    # (design section 9, matching Service#fire_event_processed).
-    private def fire_observers(snapshot : State, transitioned : Bool) : Exception?
-      if snapshot.status.failed?
-        handler : (State ->)? = @on_event_processed
-        if handler
-          begin
-            handler.call(snapshot)
-          rescue
-            # Discarded, not logged: the first recorded exception wins (section 9).
-          end
-        end
-        nil
-      else
-        first_error : Exception? = nil
-
-        if transitioned
-          transition_handler : (State ->)? = @on_transition
-          if transition_handler
-            begin
-              transition_handler.call(snapshot)
-            rescue ex
-              first_error = ex
-            end
-          end
-        end
-
-        processed_handler : (State ->)? = @on_event_processed
-        if processed_handler
-          begin
-            processed_handler.call(snapshot)
-          rescue ex
-            first_error = ex if first_error.nil?
-          end
-        end
-
-        first_error
-      end
     end
 
     # Close the mailbox and reject anything still queued (design section 8.2). A
