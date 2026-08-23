@@ -210,15 +210,12 @@ describe FSM::Service do
 
       service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "state0", FSM::Context.new)
 
-      # The default execution context is Fiber::ExecutionContext::Parallel but
-      # capped at capacity 1, so the scheduler runs one fiber at a time and only
-      # switches at an explicit suspend point (I/O, sleep, channel op, contended
-      # Mutex, Fiber.yield). Service#send has none of these, so each spawned
-      # fiber runs to completion before the next is dequeued. This verifies the
-      # spawn/WaitGroup fiber lifecycle and 100 sequential send calls completing
-      # without raising or hanging. Genuine parallel contention on the transition
-      # mutex requires resizing the default execution context (or spawning into
-      # an explicit Parallel context), tracked as fsmcr-9ct.
+      # spec_helper resizes the default execution context to more than one worker
+      # (fsmcr-9ct), so these 100 fibers now run under genuine parallelism and
+      # contend on Service#@transition_mutex rather than running one at a time.
+      # This verifies the spawn/WaitGroup fiber lifecycle and 100 concurrent send
+      # calls completing without raising or hanging. The purpose-built detectors
+      # that fail when the mutex is removed live in service_concurrency_spec.cr.
       valid_state_ids : Set(String) = Set(String).new
       10.times { |i| valid_state_ids << "state#{i}" }
 

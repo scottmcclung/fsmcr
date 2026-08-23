@@ -1,6 +1,24 @@
 require "spec"
 require "../src/fsm"
 
+# Enable real parallelism for the whole spec suite (design section 2, section 15;
+# fsmcr-9ct). Crystal's default execution context is Fiber::ExecutionContext::Parallel
+# but ships capped at one worker, so without this resize no two fibers ever run
+# simultaneously, the scheduler only switches at explicit suspend points, and
+# Service#@transition_mutex is never actually contended. Every thread-safety claim in
+# the design is unverified until the specs run under more than one worker.
+#
+# Resizing the DEFAULT context, rather than spawning the concurrency specs into a
+# separate explicit Fiber::ExecutionContext::Parallel, is what the acceptance
+# criterion names: the suite must run green with the default context resized to more
+# than one worker. It also puts every existing spawn-based spec under genuine
+# parallelism rather than only the ones that opt in. `default_workers_count` is the
+# CPU-derived worker count; `Math.max(2, ...)` guarantees the "more than one worker"
+# criterion even where that count reports 1. CRYSTAL_WORKERS alone does nothing here,
+# and -Dpreview_mt selects the legacy scheduler that has no Fiber::ExecutionContext at
+# all (design section 2), so neither is a route to this.
+Fiber::ExecutionContext.default.resize(Math.max(2, Fiber::ExecutionContext.default_workers_count))
+
 # A spec-defined domain context used as the generic parameter `T`. Per design
 # section 3 and D1 the core types are generic over `T`, and guards and callbacks
 # receive this object directly rather than unwrapping values from the FSM::Context
