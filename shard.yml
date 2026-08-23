@@ -4,6 +4,6 @@ version: 0.1.0
 authors:
   - Scott McClung <scott@nerdmagik.com>
 
-crystal: '>= 1.11.1'
+crystal: '>= 1.21.0'
 
 license: MIT
