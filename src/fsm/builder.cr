@@ -8,8 +8,9 @@ module FSM
   # (design section 4). At the end of the block `finish` validates every transition
   # target, seals every definition, and returns the immutable machine.
   #
-  # Duplicate-state-id detection is a separate concern (fsmcr-dy7) and is not
-  # implemented here.
+  # No two states share an id: registering a second state with an already-registered
+  # id raises DuplicateStateError at that `state` call rather than silently overwriting
+  # the first definition and discarding its transitions (design section 4, fsmcr-dy7).
   class Builder(T)
     @id : String
     @states : Hash(String, StateDefinition(T))
@@ -21,7 +22,9 @@ module FSM
     # Register a state, yielding its definition so transitions and callbacks can be
     # attached (design section 4). The definition is registered regardless of what
     # the block returns.
+    # Raises DuplicateStateError if id was already registered by this builder.
     def state(id : String, &) : StateDefinition(T)
+      raise DuplicateStateError.new "Expected each state to have a unique id. A state with id #{id} was already registered." if @states.has_key?(id)
       definition : StateDefinition(T) = StateDefinition(T).new(id)
       yield definition
       @states[id] = definition
