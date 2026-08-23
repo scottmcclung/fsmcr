@@ -7,10 +7,11 @@ require "wait_group"
 # (design section 3.2). It stores FSM::Any values behind a mutex and exposes
 # get/set/modify. These specs pin the CURRENT contract of those three methods.
 #
-# Missing-key behavior is pinned to KeyError throughout. Design section 3.2 names the
-# missing-key KeyError as a rough edge to fix, and fsmcr-54d will add non-raising
-# accessors (fetch/has_key?/delete). Until then these specs pin what the code does
-# today, not what it will do forever.
+# Missing-key behavior for get/modify stays pinned to KeyError (design section 3.2 names
+# the missing-key KeyError as a rough edge, but the existing get/modify contract is left
+# raising on purpose). fsmcr-54d ADDS non-raising accessors alongside them: get?, fetch,
+# has_key?, and delete. The specs below the get/set/modify block pin that new surface.
+# Each new method is mutex-synchronized like the existing three (design section 12.5).
 #
 # Values come back as the FSM::Any union (get returns Any, modify's block receives
 # Any). Comparisons against a literal need no cast, but arithmetic on a returned value
@@ -165,6 +166,244 @@ describe FSM::Context do
 
         errors.should be_empty
         ctx.get("n").should eq(total)
+      end
+    end
+  end
+
+  # get? is the non-raising getter fsmcr-54d adds (design section 3.2 names the missing-key
+  # KeyError as the rough edge; get? is the issue-prescribed remedy). Where get forwards
+  # Hash#[] and raises on a missing key, get? forwards Hash#[]? and returns nil for it.
+  describe "#get?" do
+    it "returns the value a prior #set stored" do
+      ctx : FSM::Context = FSM::Context.new
+      ctx.set("greeting", "hello")
+
+      ctx.get?("greeting").should eq("hello")
+    end
+
+    it "returns nil for a key that was never set instead of raising" do
+      # The contrast with #get, which raises KeyError on the same missing key. get? is
+      # the non-raising accessor promised in design section 3.2.
+      ctx : FSM::Context = FSM::Context.new
+
+      ctx.get?("missing").should be_nil
+    end
+
+    it "returns nil for a stored nil, the same value it returns for an absent key" do
+      # The wrinkle to pin explicitly. FSM::Any INCLUDES Nil (src/fsm.cr), so a key whose
+      # stored value is nil and a key that was never set both come back nil from get?.
+      # get? alone cannot tell the two apart; has_key? is the disambiguator, pinned in
+      # the pairing spec below.
+      ctx : FSM::Context = FSM::Context.new
+      ctx.set("maybe", nil)
+
+      ctx.get?("maybe").should be_nil
+      ctx.get?("absent").should be_nil
+    end
+
+    it "distinguishes a stored nil from an absent key only when paired with has_key?" do
+      # The disambiguation contract. get? returns nil for both cases; has_key? is what
+      # separates "present and nil" from "absent". A caller that must tell them apart
+      # pairs the two.
+      ctx : FSM::Context = FSM::Context.new
+      ctx.set("maybe", nil)
+
+      # Present and nil: get? is nil, has_key? is true.
+      ctx.get?("maybe").should be_nil
+      ctx.has_key?("maybe").should be_true
+
+      # Absent: get? is nil, has_key? is false.
+      ctx.get?("absent").should be_nil
+      ctx.has_key?("absent").should be_false
+    end
+  end
+
+  # fetch(key, default) is the fetch-with-default accessor from design section 3.2. It
+  # returns the stored value when present and the supplied default when absent, and it
+  # never mutates the context: a defaulted lookup does not store the default.
+  describe "#fetch" do
+    it "returns the stored value when the key is present" do
+      ctx : FSM::Context = FSM::Context.new
+      ctx.set("count", 7)
+
+      ctx.fetch("count", 0).should eq(7)
+    end
+
+    it "returns the default when the key is absent" do
+      ctx : FSM::Context = FSM::Context.new
+
+      ctx.fetch("missing", 99).should eq(99)
+    end
+
+    it "returns a value typed as FSM::Any when the default is itself an Any member" do
+      # Pins what type comes back. Hash#fetch(key, default) yields V | typeof(default);
+      # with V == FSM::Any and a default that is itself an Any member (Int32 here), the
+      # union collapses back to FSM::Any, so the result assigns to an FSM::Any local.
+      ctx : FSM::Context = FSM::Context.new
+
+      result : FSM::Any = ctx.fetch("missing", 0)
+      result.should eq(0)
+    end
+
+    it "does not store the default, so a later #get still raises and #has_key? stays false" do
+      # The non-mutating contract. fetch reads through the default; it does not write it.
+      # After a defaulted lookup the key is still absent: #get raises KeyError and
+      # #has_key? reports false.
+      ctx : FSM::Context = FSM::Context.new
+
+      ctx.fetch("missing", 0).should eq(0)
+
+      ctx.has_key?("missing").should be_false
+      expect_raises(KeyError) { ctx.get("missing") }
+    end
+  end
+
+  # has_key? is the presence test from design section 3.2. It reports whether a key is
+  # present regardless of the stored value, which is what lets get? and a stored nil be
+  # told apart.
+  describe "#has_key?" do
+    it "is true after a #set" do
+      ctx : FSM::Context = FSM::Context.new
+      ctx.set("greeting", "hello")
+
+      ctx.has_key?("greeting").should be_true
+    end
+
+    it "is false for a key that was never set" do
+      ctx : FSM::Context = FSM::Context.new
+
+      ctx.has_key?("missing").should be_false
+    end
+
+    it "is true when the stored value is nil, distinguishing presence from absence" do
+      # Presence is about the key, not the value. A key whose value is nil is present,
+      # so has_key? is true even though get? on it returns nil (design section 3.2, the
+      # FSM::Any-includes-Nil wrinkle).
+      ctx : FSM::Context = FSM::Context.new
+      ctx.set("maybe", nil)
+
+      ctx.has_key?("maybe").should be_true
+    end
+
+    it "is false after the key is deleted" do
+      ctx : FSM::Context = FSM::Context.new
+      ctx.set("greeting", "hello")
+      ctx.delete("greeting")
+
+      ctx.has_key?("greeting").should be_false
+    end
+  end
+
+  # delete removes a key from the context (design section 3.2). Its return value follows
+  # Crystal's Hash#delete convention.
+  describe "#delete" do
+    it "removes the key so #has_key? is false afterward" do
+      ctx : FSM::Context = FSM::Context.new
+      ctx.set("greeting", "hello")
+
+      ctx.delete("greeting")
+
+      ctx.has_key?("greeting").should be_false
+    end
+
+    it "makes a subsequent #get raise KeyError for the removed key" do
+      ctx : FSM::Context = FSM::Context.new
+      ctx.set("greeting", "hello")
+
+      ctx.delete("greeting")
+
+      expect_raises(KeyError) { ctx.get("greeting") }
+    end
+
+    it "returns the removed value when the key was present" do
+      # Spec-writer-decided contract, flagged in the report: delete mirrors Crystal's
+      # Hash#delete, which returns the value that was removed. Context wraps a Hash, so
+      # matching Hash#delete keeps the bucket's surface consistent with the type it is.
+      ctx : FSM::Context = FSM::Context.new
+      ctx.set("count", 42)
+
+      ctx.delete("count").should eq(42)
+    end
+
+    it "returns nil when the key was absent" do
+      # The other half of the Hash#delete convention: deleting a key that is not there
+      # returns nil rather than raising. This makes delete safe to call unconditionally.
+      ctx : FSM::Context = FSM::Context.new
+
+      ctx.delete("missing").should be_nil
+    end
+  end
+
+  # Concurrent set/delete/has_key? traffic on one shared context under real parallelism
+  # (design section 12.5; fsmcr-9ct). This is a robustness/smoke check in the style of
+  # the ring test in service_concurrency_spec.cr, not a lost-update detector: it asserts
+  # that the shared @data Hash survives concurrent structural mutation from many worker
+  # threads without crashing or corrupting, and reaches a deterministic final state.
+  #
+  # spec_helper resizes the default execution context to more than one worker, so the
+  # fibers below mutate the one underlying Hash from separate worker threads at the same
+  # time. A Hash mutated structurally (set grows it, delete shrinks it) from two threads
+  # without a lock can crash on a concurrent rehash or corrupt its buckets. The mutex
+  # every Context method holds (design section 12.5) is the only thing serializing that
+  # structural churn here.
+  #
+  # Determinism. Each fiber owns a distinct key "k#{i}", so no two fibers ever contend
+  # for the same key and every per-key assertion is exact: right after a set the key is
+  # present, right after a delete it is absent, on every run. Every fiber's loop ends on
+  # a delete, so once all fibers finish the context holds none of the keys. The
+  # assertions are therefore deterministic under the correct implementation, with no
+  # coin-flip race: the parallelism stresses the shared structure, the ownership keeps
+  # the observable outcome fixed.
+  describe "concurrent set/delete/has_key? under real parallelism" do
+    it "survives structural churn from many fibers and ends with every key absent" do
+      ctx : FSM::Context = FSM::Context.new
+
+      fiber_count : Int32 = 200
+      cycles_per_fiber : Int32 = 50
+
+      # Fiber#run logs an unhandled fiber exception to stderr instead of failing the spec
+      # runner, so a crashing set/delete would otherwise leave the spec green. Collect
+      # exceptions and any per-fiber invariant violation and assert on them directly.
+      errors : Array(Exception) = [] of Exception
+      violations : Array(String) = [] of String
+      report_mutex : Mutex = Mutex.new
+      wait_group : WaitGroup = WaitGroup.new(fiber_count)
+
+      fiber_count.times do |i|
+        key : String = "k#{i}"
+        spawn do
+          cycles_per_fiber.times do
+            ctx.set(key, i)
+            # Widen the window between the two structural mutations so a missing lock has
+            # a full scheduler slot to interleave another worker's set or delete, the same
+            # widening trick the atomicity detector above uses.
+            Fiber.yield
+            present_after_set : Bool = ctx.has_key?(key)
+            ctx.delete(key)
+            present_after_delete : Bool = ctx.has_key?(key)
+
+            unless present_after_set && !present_after_delete
+              report_mutex.synchronize do
+                violations << "#{key}: present_after_set=#{present_after_set} present_after_delete=#{present_after_delete}"
+              end
+            end
+          end
+        rescue ex
+          report_mutex.synchronize { errors << ex }
+        ensure
+          wait_group.done
+        end
+      end
+
+      wait_group.wait
+
+      errors.should be_empty
+      violations.should be_empty
+
+      # Every fiber's last act on its key is a delete, so once all fibers finish no key
+      # remains. Checked per key because Context exposes presence, not size.
+      fiber_count.times do |i|
+        ctx.has_key?("k#{i}").should be_false
       end
     end
   end

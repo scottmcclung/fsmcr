@@ -114,17 +114,23 @@ service.send("open") # => opened, because the guard passed
 ### `FSM::Context`, the bucket the library ships
 
 If you have no domain object of your own, use `FSM::Context` as `T`. It is a
-hash-behind-a-mutex with `get`, `set`, and `modify`.
+hash-behind-a-mutex. Every method holds the mutex for the whole operation, so a
+shared context gets per-operation atomicity without you writing any locking.
 
 ```crystal
 require "fsm"
 
 ctx = FSM::Context.new
 ctx.set("count", 0)
-ctx.get("count") # => 0
+ctx.get("count")            # => 0
+ctx.get?("missing")         # => nil, where get would raise KeyError
+ctx.fetch("missing", 99)    # => 99, and the key stays absent
+ctx.has_key?("count")       # => true
+ctx.delete("count")         # => 0, the removed value
 
 # modify reads, transforms, and writes back under one lock, so a read-modify-write
 # does not race the way set(get + 1) would.
+ctx.set("count", 0)
 ctx.modify("count") do |value|
   current = value.is_a?(Int32) ? value : 0
   current + 1
@@ -133,8 +139,36 @@ end
 ctx.get("count") # => 1
 ```
 
-Values come back as `FSM::Any`, a union that includes `Nil` and `Bool`, so narrow with
-`is_a?` before doing arithmetic. `get` on a missing key raises `KeyError`.
+The accessors:
+
+- `get(key)` returns the stored value and raises `KeyError` on a missing key.
+- `get?(key)` returns the stored value, or `nil` when the key is absent, instead
+  of raising.
+- `set(key, value)` stores a value and returns it.
+- `fetch(key, default)` returns the stored value when present and `default` when
+  absent. It does not store the default, so the key stays absent after a defaulted
+  lookup.
+- `has_key?(key)` reports whether the key is present, regardless of its value.
+- `delete(key)` removes a key and returns the removed value, or `nil` when the key
+  was absent.
+- `modify(key) { |value| ... }` reads, transforms, and writes back under one lock.
+
+Values come back as `FSM::Any`, the union
+`Nil | Bool | Int32 | Int64 | Float32 | Float64 | String | Array(Any) | Hash(String, Any)`.
+Because it includes `Nil` and `Bool`, narrow with `is_a?` before doing arithmetic.
+
+Because `FSM::Any` includes `Nil`, a stored `nil` and an absent key both come back
+`nil` from `get?` and from `delete`. Pair with `has_key?` when you must tell "present
+and nil" from "absent".
+
+That pairing is two separate lock acquisitions, not one atomic operation. Each of
+`get?`, `has_key?`, and `delete` holds the mutex only for its own call, so between
+the two calls the lock is released. On a context that only one fiber touches this is
+safe, because nothing can change the key in the gap. On a context shared across
+fibers another fiber can set or delete the key between your `has_key?` and your
+`get?` (or `delete`), so the pair can observe a state that never existed as a single
+moment. There is no atomic compound read; `modify` is the only atomic compound
+operation (design section 12.5).
 
 ### `T = Nil` is unsupported
 
