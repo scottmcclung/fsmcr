@@ -14,6 +14,14 @@ module FSM
   # the same interpreter state by fiber ownership instead of a lock: exactly one fiber
   # ever runs the machine's code (design section 12.2).
   #
+  # When T carries its own lock, that lock nests inside @transition_mutex, never the
+  # reverse: guards and callbacks receive the context directly and only reach its lock
+  # while @transition_mutex is already held; an observer reaches it only if a caller's
+  # closure captures the context externally, which still runs under the same lock. The
+  # order is transition-mutex-before-context-mutex on every internal path. A caller who
+  # calls send while holding a context lock the step's callbacks will want inverts that
+  # order and can deadlock (design section 12.7).
+  #
   # D18: the snapshot is the interpreter's only position field. Service derives the
   # current StateDefinition from `snapshot.id` when it needs to plan, rather than
   # holding both a snapshot and a definition and keeping them in step. `current_state`

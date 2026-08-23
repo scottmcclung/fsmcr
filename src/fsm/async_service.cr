@@ -246,7 +246,10 @@ module FSM
     # Send from outside a callback only. A send from inside a callback of the same
     # instance deadlocks: the callback runs on the owning fiber, and the reply it waits
     # on can only be produced by that same owning fiber, so it waits on itself forever
-    # (design section 8.2). From inside a callback, post instead.
+    # (design section 8.2). From inside a callback, post instead. A cross-fiber send made
+    # while holding a context lock the owning fiber's callback wants is the same deadlock
+    # seen through that lock, since the caller blocks on the reply while the callback
+    # blocks on the lock (design section 12.7).
     #
     # A send into a stopped or errored async service short-circuits before touching
     # the mailbox and returns a Failed snapshot as a value (design section 11): the

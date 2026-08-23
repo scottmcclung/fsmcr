@@ -89,6 +89,12 @@ module FSM
     # under one lock hold, which is what makes a compound read-modify-write atomic
     # against a shared context (design section 12.5). Reads @data[key] before
     # calling the block, so a missing key raises KeyError and the block never runs.
+    #
+    # The block runs while @mutex is held. Calling back into an interpreter's send
+    # from inside it holds the context lock across the transition and inverts the
+    # transition-mutex-before-context-mutex order the interpreters keep, which can
+    # deadlock against a concurrent step whose callback wants this same lock (design
+    # section 12.7).
     def modify(key : String, &block : (Any) -> Any) : Any
       @mutex.synchronize do
         current_value : Any = @data[key]
