@@ -16,8 +16,9 @@ module FSM
   #
   # The kind of effect an Action represents (design section 7). Blocked is emitted
   # by `plan` when the state has an on_blocked handler for the event (fsmcr-bfn.4,
-  # design section 10.2 step 15). UnknownEvent exists now but `plan` does not emit
-  # it until the on_unknown_event handler lands (fsmcr-bfn.5).
+  # design section 10.2 step 15). UnknownEvent is emitted by `plan` when the state
+  # has an on_unknown_event handler for the event (fsmcr-bfn.5, design section 10.2
+  # step 15).
   enum ActionKind
     Exit
     Transition

@@ -70,6 +70,18 @@ describe "machine sealing" do
     end
   end
 
+  it "raises when on_unknown_event is called on a sealed StateDefinition" do
+    machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("test_machine") do |m|
+      m.state("state1") { |s| s.on_event("go", "state1") }
+    end
+
+    sealed : FSM::StateDefinition(FSM::Context) = machine.states["state1"]
+
+    expect_raises(FSM::SealedStateError) do
+      sealed.on_unknown_event { |_event, _context| }
+    end
+  end
+
   it "raises when Transition#on is called after the machine seals the transition" do
     captured : FSM::Transition(FSM::Context)? = nil
 

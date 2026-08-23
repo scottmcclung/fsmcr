@@ -18,14 +18,15 @@ require "./support/plan_probe"
 #   TransitionFound, same state, external     -> the same three (see self_transition_spec)
 #   TransitionFound, same state, internal     -> [Transition] only (see self_transition_spec)
 #   TransitionsBlocked                        -> empty when no on_blocked handler
-#   EventNotRecognized                        -> empty in this issue
+#   EventNotRecognized                        -> empty when no on_unknown_event handler
 #
 # TransitionsBlocked is empty here because no on_blocked handler is registered for
 # the event; see spec/on_blocked_spec.cr for the handler-registered case where plan
-# emits a Blocked action (fsmcr-bfn.4). The UnknownEvent action requires an
-# on_unknown_event handler, which is fsmcr-bfn.5; that ActionKind variant exists,
-# but plan never emits it yet. Only the emptiness of the action list is asserted
-# here.
+# emits a Blocked action (fsmcr-bfn.4). EventNotRecognized is empty here because no
+# on_unknown_event handler is registered on the state; see
+# spec/on_unknown_event_spec.cr for the handler-registered case where plan emits an
+# UnknownEvent action (fsmcr-bfn.5). Only the emptiness of the action list is
+# asserted here.
 describe "plan" do
   it "emits Exit(current), Transition, Entry(next) for a transition to a different state" do
     ctx : TurnContext = TurnContext.new
@@ -161,16 +162,18 @@ describe "plan" do
 
     plan : FSM::Plan(TurnContext) = FSM::PlanProbe.plan(machine, machine.states["cave"], "xyzzy", ctx)
 
-    # The UnknownEvent action needs an on_unknown_event handler (fsmcr-bfn.5); until
-    # then the list is empty (design section 10.2 step 15).
+    # The UnknownEvent action needs an on_unknown_event handler for the event; this
+    # state registers none, so the list is empty (design section 10.2 step 15). See
+    # spec/on_unknown_event_spec.cr for the handler-registered case.
     plan.actions.should be_empty
     # Destination for an unrecognized event is the unchanged current state (step 14).
     plan.next_state.id.should eq "cave"
   end
 
   it "defines all five ActionKind variants" do
-    # The Blocked and UnknownEvent variants exist now even though plan does not emit
-    # them until fsmcr-bfn.4 / fsmcr-bfn.5 (design section 7).
+    # All five variants exist. plan emits Blocked when the state has an on_blocked
+    # handler (fsmcr-bfn.4) and UnknownEvent when the state has an on_unknown_event
+    # handler (fsmcr-bfn.5); see the respective specs (design section 7).
     kinds : Array(FSM::ActionKind) = [
       FSM::ActionKind::Exit,
       FSM::ActionKind::Transition,

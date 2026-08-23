@@ -30,6 +30,16 @@ module FSM
     # Array(String) of blocked target ids so it never re-runs a guard predicate.
     @blocked_callbacks : Hash(String, (String, T, Array(String)) ->) = {} of String => (String, T, Array(String)) ->
 
+    # The state-wide unknown-event handler (design section 9, section 13.3, D10). A
+    # single handler per state, stored in one field rather than a Hash keyed by
+    # event, because it catches every unregistered event: anticipating unknown
+    # events individually is a contradiction (design section 9, D10). This is the
+    # deliberate asymmetry with per-event @blocked_callbacks. It fires only when the
+    # event has no transition registered at all, never for a blocked event or a
+    # successful transition. Registering a second handler replaces the first (last
+    # write wins, the same semantics as on_entry and on_exit).
+    @unknown_event_callback : ((String, T) ->)? = nil
+
     # Whether the owning machine has sealed this definition (design section 5).
     @sealed : Bool = false
 
@@ -64,6 +74,19 @@ module FSM
     def on_blocked(event : String, &block : (String, T, Array(String)) ->) : self
       raise SealedStateError.new "Cannot register a blocked handler on state #{@id} after it has been sealed by a machine." if @sealed
       @blocked_callbacks[event] = block
+      self
+    end
+
+    # Register the state-wide handler fired when an event has no transition
+    # registered on this state at all (design section 9, section 13.3, D10). It is
+    # not keyed by event because a single handler catches every unregistered event.
+    # It does not fire for a blocked event or when any transition succeeds. The
+    # handler receives the event and the context, matching on_entry and on_exit;
+    # there are no blocked target ids because no transition was registered.
+    # Registering a second handler replaces the first (last write wins).
+    def on_unknown_event(&block : (String, T) ->) : self
+      raise SealedStateError.new "Cannot register an unknown-event handler on state #{@id} after it has been sealed by a machine." if @sealed
+      @unknown_event_callback = block
       self
     end
 
@@ -149,6 +172,14 @@ module FSM
     # blocked outcome emits a Blocked action or an empty action list.
     protected def blocked_callback(event : String) : ((String, T, Array(String)) ->)?
       @blocked_callbacks[event]?
+    end
+
+    # The state-wide unknown-event handler, or nil when none is registered (design
+    # section 10.2 step 15). `plan` uses its presence to decide whether an
+    # EventNotRecognized outcome emits an UnknownEvent action or an empty action
+    # list.
+    protected def unknown_event_callback : ((String, T) ->)?
+      @unknown_event_callback
     end
   end
 end

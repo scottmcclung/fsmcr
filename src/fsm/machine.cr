@@ -67,11 +67,27 @@ module FSM
         # guard (design section 9, D12).
         Plan(T).new(outcome, state, blocked_actions(state, event, outcome.blocked))
       in EventNotRecognized
-        # Step 14: destination is the unchanged current state. Empty action list in
-        # this issue; the UnknownEvent action needs an on_unknown_event handler
-        # (fsmcr-bfn.5, design section 10.2 step 15).
-        Plan(T).new(outcome, state, [] of Action(T))
+        # Step 14: destination is the unchanged current state. Step 15: a single
+        # UnknownEvent action when the state has an unknown-event handler, else an
+        # empty list, which preserves today's silent no-op (design section 10.2
+        # step 15).
+        Plan(T).new(outcome, state, unknown_event_actions(state))
       end
+    end
+
+    # The action list for an unrecognized event (design section 10.2 step 15). A
+    # single UnknownEvent action when the state registered an unknown-event handler,
+    # else empty. The action's state_id is the unchanged current state (step 14).
+    # Its callback closes over the state-wide handler so the interpreter's
+    # (String, T) -> action shape invokes it directly (design section 9, D10).
+    private def unknown_event_actions(state : StateDefinition(T)) : Array(Action(T))
+      handler : ((String, T) ->)? = state.unknown_event_callback
+      return [] of Action(T) if handler.nil?
+
+      callback : (String, T) -> = ->(fired_event : String, context : T) do
+        handler.call(fired_event, context)
+      end
+      [Action(T).new(ActionKind::UnknownEvent, state.id, callback)]
     end
 
     # The action list for a blocked event (design section 10.2 step 15). A single
