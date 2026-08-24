@@ -1,11 +1,11 @@
 require "./spec_helper"
 
-# `T = Nil` is unsupported (design section 3.1, section 15, D5); a caller with no
+# `T = Nil` is unsupported (design section 3.1, D5); a caller with no
 # domain context of its own uses FSM::Context, the no-domain-context alternative.
 #
 # The macro check inside Machine.build implements the rejection: `T == Nil` raises a
-# compile-time error naming FSM::Context (section 15 records this as implemented and
-# verified). This spec shells out to `crystal build` on a tiny program that
+# compile-time error naming FSM::Context (design section 3.1 specifies this rejection
+# and its diagnostic). This spec shells out to `crystal build` on a tiny program that
 # instantiates Machine(Nil) and asserts the compile fails with a message naming
 # FSM::Context.
 describe "Machine(Nil)" do

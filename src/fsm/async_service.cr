@@ -224,7 +224,7 @@ module FSM
     # post has already returned, so there is no snapshot to hand back and the failure
     # is recorded in the interpreter instead. A post into a stopped or errored async
     # service is dropped silently, because there is no return value to carry a refusal
-    # (design section 11, section 15 decided here).
+    # (design section 11, D22).
     def post(event : String) : Nil
       if Fiber.current == @fiber
         @cascade.push(event)

@@ -11,9 +11,10 @@ require "./spec_helper"
 # plan on the owning fiber, which the concurrency contract requires (design section
 # 12.3).
 #
-# Two behaviors the design left open (section 15) are DECIDED here and documented at
-# their specs below: what an errored or stopped async service does with a new event,
-# and what happens when an observer itself raises while handling a failed step.
+# Two behaviors the design settles in section 11 are exercised here and documented at
+# their specs below: what an errored or stopped async service does with a new event
+# (D22), and what happens when an observer itself raises while handling a failed step
+# (D19, D23).
 
 # A context whose callbacks record into a log and can drive the async service that
 # owns it. Holding the reference is how a callback posts a follow-up event from inside
@@ -442,7 +443,7 @@ describe "FSM::AsyncService" do
     end
 
     it "keeps the first recorded exception when the observer itself raises on the failed step (D19)" do
-      # DECIDED HERE (design section 9, section 15): an observer that raises while
+      # Per the design (section 11, D19): an observer that raises while
       # handling a failed step does not overwrite the failure the snapshot already
       # carries. The first exception is the callback's, recorded before the observer
       # ran. The observer's own exception is discarded, matching how Service treats a
@@ -478,8 +479,8 @@ describe "FSM::AsyncService" do
       service.error.should eq callback_error
     end
 
-    it "poisons the async service when an observer raises on a non-failed step under post (design section 11, section 15)" do
-      # DECIDED HERE (design section 11, section 15): an observer that raises on a
+    it "poisons the async service when an observer raises on a non-failed step under post (design section 11, D23)" do
+      # Per the design (section 11, D23): an observer that raises on a
       # SUCCESSFUL step poisons the async service. An observer exception on a committed
       # step is an interpreter-level failure, not a transaction failure, so it poisons
       # under BOTH post and send. Under post there is no caller to receive it, so the
@@ -823,7 +824,7 @@ describe "FSM::AsyncService" do
 
   describe "stop (design section 8.2)" do
     it "reports stopped and refuses further events after stop" do
-      # DECIDED HERE (design section 8.2, section 11, section 15): a stopped async
+      # Per the design (section 8.2, section 11, D22): a stopped async
       # service, like an errored one, accepts no further events. post is dropped
       # silently, because post has no reply channel and there is nothing to report on.
       # send returns a Failed snapshot rather than blocking forever on a fiber that has
@@ -870,9 +871,9 @@ describe "FSM::AsyncService" do
     end
   end
 
-  describe "errored async service incoming events (design section 15)" do
+  describe "errored async service incoming events (design section 11, D22)" do
     it "drops a post silently and returns the recorded failure from a send" do
-      # DECIDED HERE (design section 11, section 15): an errored async service refuses
+      # Per the design (section 11, D22): an errored async service refuses
       # events, and the manner of refusal follows the return-shape rule that governs
       # the whole library (design section 11): "where a value comes back, failure is in
       # the value; where nothing comes back, failure is in the interpreter."

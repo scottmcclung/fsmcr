@@ -155,7 +155,7 @@ describe "FSM::Service under real parallel contention" do
   it "keeps the interpreter consistent and raises nothing while many fibers drive a ring of states" do
     # A ten-state ring where every state advances to the next on "advance". Different
     # fibers read and commit @state concurrently. This is a robustness check that the
-    # suite runs green under real parallelism (design section 15): no torn read of the
+    # suite runs green under real parallelism (design section 12): no torn read of the
     # cached snapshot crashes a step, every send returns a Success snapshot, and the
     # interpreter always sits in one of the ring's states. It is not a lost-update
     # detector; the two specs above are.

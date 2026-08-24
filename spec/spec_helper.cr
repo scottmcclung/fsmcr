@@ -1,12 +1,14 @@
 require "spec"
 require "../src/fsm"
 
-# Enable real parallelism for the whole spec suite (design section 2, section 15;
+# Enable real parallelism for the whole spec suite (design section 2, section 12;
 # fsmcr-9ct). Crystal's default execution context is Fiber::ExecutionContext::Parallel
 # but ships capped at one worker, so without this resize no two fibers ever run
 # simultaneously, the scheduler only switches at explicit suspend points, and
-# Service#@transition_mutex is never actually contended. Every thread-safety claim in
-# the design is unverified until the specs run under more than one worker.
+# Service#@transition_mutex is never actually contended. Section 12's concurrency
+# contract covers interpreter state with the mutex and the shared machine with sealing.
+# That contract is only exercised when more than one worker runs fibers at the same
+# time, which is what the resize provides.
 #
 # Resizing the DEFAULT context, rather than spawning the concurrency specs into a
 # separate explicit Fiber::ExecutionContext::Parallel, is what the acceptance
@@ -19,7 +21,7 @@ require "../src/fsm"
 # is never required and referencing it fails as an undefined constant (design section
 # 2). The two flags together, -Dpreview_mt -Dexecution_context, remain supported and
 # keep execution contexts, but still leave the default context at one worker (design
-# section 15). So none of these substitutes for the resize call below.
+# section 2). So none of these substitutes for the resize call below.
 Fiber::ExecutionContext.default.resize(Math.max(2, Fiber::ExecutionContext.default_workers_count))
 
 # A spec-defined domain context used as the generic parameter `T`. Per design

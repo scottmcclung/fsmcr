@@ -29,8 +29,8 @@ module FSM
   # Sealing guards post-construction misuse, not intra-block leaks. The registrar
   # holds no internal lock, so a block that leaks the registrar to another fiber
   # during construction is outside the guarantee, consistent with the project's stance
-  # on intra-build escapes (design section 15 leaves real-parallelism verification
-  # open).
+  # that concurrency safety comes from sealing and single-owner access after
+  # construction, not from guarding intra-build escapes (design section 12).
   class ObserverRegistrar
     @on_transition : (State ->)? = nil
     @on_event_processed : (State ->)? = nil
