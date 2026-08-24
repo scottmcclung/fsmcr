@@ -54,7 +54,7 @@ describe "plan" do
     # The Exit action names the state being left; the Entry action names the state
     # being entered (design section 7). The Transition action's state_id is left
     # unasserted; the design fixes the kind order but not what state_id the middle
-    # action carries. See the implementer notes in the handoff.
+    # action carries.
     plan.actions[0].state_id.should eq "cave"
     plan.actions[2].state_id.should eq "clearing"
   end
@@ -189,11 +189,6 @@ end
 # the FSM namespace cannot reach it. This compiles a tiny program that calls `plan`
 # from the top level and asserts the compile fails naming a protected-visibility
 # error. It is the D7 counterpart to nil_context_spec's compile probe.
-#
-# Note on the red state: before the core is implemented, this program fails to
-# compile with "undefined method 'plan'", which does NOT contain "protected", so the
-# assertion below is red until plan exists and is protected. That is the intended
-# red-then-green behavior for this file.
 describe "plan visibility" do
   it "is not callable from outside the FSM namespace" do
     program : String = <<-CRYSTAL

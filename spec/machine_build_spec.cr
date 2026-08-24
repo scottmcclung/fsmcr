@@ -8,11 +8,6 @@ require "./spec_helper"
 # At the end of the block the builder validates that every transition target names
 # an existing state, then seals every definition and transition.
 #
-# The type of the yielded builder `m` is left unannotated: design section 4 names
-# the construction path but not the builder's own type, so annotating it here would
-# invent surface the implementer has not been given. That is flagged as an open
-# question for the implementer.
-#
 # Duplicate-state-id detection (fsmcr-dy7): no two states share an id, so registering
 # m.state("cave") twice raises DuplicateStateError rather than silently overwriting the
 # first definition (design section 4).

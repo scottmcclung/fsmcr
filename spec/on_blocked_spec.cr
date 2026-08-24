@@ -267,7 +267,8 @@ describe "on_blocked" do
     # Counts every evaluation of the guard predicate. If the on_blocked path re-ran the
     # guard to work out why the event was blocked, this would climb past one. The
     # handler instead reads the blocked target ids and never touches the predicate.
-    # This is the tge-teg double-evaluation regression (design section 9).
+    # This is the double-evaluation regression that design section 9 prevents (tge-teg in the
+    # fork this library descends from).
     guard_evaluations : Int32 = 0
     reason : String? = nil
 

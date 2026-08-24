@@ -1,7 +1,6 @@
 require "./spec_helper"
 
-# Sealing after build (design section 5, D13 and D16). Ported from the fsmcr-65b
-# sealing coverage onto the new construction API and names.
+# Sealing after build (design section 5, D13 and D16).
 #
 # After `Machine(T).build` returns, every StateDefinition(T) and every
 # Transition(T) it owns is sealed and shared, so mutating them must raise

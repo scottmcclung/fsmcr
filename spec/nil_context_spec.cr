@@ -1,17 +1,13 @@
 require "./spec_helper"
 
-# `T = Nil` is unsupported (design section 3.1, section 15, D5). A caller with no
-# domain context of its own uses FSM::Context instead.
+# `T = Nil` is unsupported (design section 3.1, section 15, D5); a caller with no
+# domain context of its own uses FSM::Context, the no-domain-context alternative.
 #
-# Design section 15 sketches a compile-time rejection inside the generic types:
-#   {% if @type.type_vars.first.resolve == Nil %}
-#     {% raise "... use FSM::Context ..." %}
-#   {% end %}
-# Whether that macro check is workable is unverified; documentation is the fallback
-# either way, and the diagnostic should name FSM::Context. This spec lives in its
-# own file so it can be dropped if the macro proves unworkable. It shells out to
-# `crystal build` on a tiny program that instantiates Machine(Nil) and asserts the
-# compile fails with a message naming FSM::Context.
+# The macro check inside Machine.build implements the rejection: `T == Nil` raises a
+# compile-time error naming FSM::Context (section 15 records this as implemented and
+# verified). This spec shells out to `crystal build` on a tiny program that
+# instantiates Machine(Nil) and asserts the compile fails with a message naming
+# FSM::Context.
 describe "Machine(Nil)" do
   it "is rejected at compile time with a diagnostic naming FSM::Context" do
     # Crystal's `require` resolves relative to the requiring file's directory (or a

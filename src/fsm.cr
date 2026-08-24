@@ -5,12 +5,12 @@
 require "./fsm/observer_firing"
 require "./fsm/*"
 
-# The Finite State Machine (FSM) module provides a framework for modeling and implementing finite state machines.
-#
-# It includes classes for creating and managing state machines, states, transitions, and associated context.
-# States define the different conditions or modes that a system can be in, transitions define how the system moves
-# from one state to another in response to events, and a context is used to carry information across state transitions.
-# See examples directory for an example of how to leverage the FSM in your app
+# fsmcr is a general-purpose finite state machine library (design section 1). A
+# machine is defined once by a machine-scoped builder, sealed, then interpreted. The
+# sealed definition is immutable and safe to share across interpreters and fibers.
+# Interpretation separates deciding from doing: a pure core computes an ordered list
+# of effects and runs none of them, and an interpreter (Service or AsyncService) runs
+# them (design section 1).
 module FSM
   alias Any = Nil |
               Bool |

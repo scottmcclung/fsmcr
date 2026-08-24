@@ -43,7 +43,7 @@ module FSM
       @states[id]?
     end
 
-    # The pure core (design section 7, section 10.2 steps 9-16, D7). Selects the
+    # The pure core (design section 7, section 10.3 steps 9-16, D7). Selects the
     # transition, evaluates guards, resolves the destination, and computes the
     # ordered action list. It executes nothing; the interpreter runs the actions.
     #
@@ -62,20 +62,20 @@ module FSM
       in TransitionsBlocked
         # Step 14: destination is the unchanged current state. Step 15: a single
         # Blocked action when the state has a handler for this event, else an empty
-        # list (design section 10.2 step 15). The action carries the blocked target
+        # list (design section 10.3 step 15). The action carries the blocked target
         # ids resolution already collected, so the blocked path never re-runs a
         # guard (design section 9, D12).
         Plan(T).new(outcome, state, blocked_actions(state, event, outcome.blocked))
       in EventNotRecognized
         # Step 14: destination is the unchanged current state. Step 15: a single
         # UnknownEvent action when the state has an unknown-event handler, else an
-        # empty list, which preserves today's silent no-op (design section 10.2
+        # empty list, which preserves today's silent no-op (design section 10.3
         # step 15).
         Plan(T).new(outcome, state, unknown_event_actions(state))
       end
     end
 
-    # The action list for an unrecognized event (design section 10.2 step 15). A
+    # The action list for an unrecognized event (design section 10.3 step 15). A
     # single UnknownEvent action when the state registered an unknown-event handler,
     # else empty. The action's state_id is the unchanged current state (step 14).
     # Its callback closes over the state-wide handler so the interpreter's
@@ -90,7 +90,7 @@ module FSM
       [Action(T).new(ActionKind::UnknownEvent, state.id, callback)]
     end
 
-    # The action list for a blocked event (design section 10.2 step 15). A single
+    # The action list for a blocked event (design section 10.3 step 15). A single
     # Blocked action when the state registered a handler for the event, else empty.
     # The action's state_id is the unchanged current state (step 14). Its callback
     # closes over the blocked target ids so the interpreter's (String, T) -> action
@@ -106,12 +106,12 @@ module FSM
       [Action(T).new(ActionKind::Blocked, state.id, callback)]
     end
 
-    # The ordered action list for a found transition (design section 10.2 step 15).
+    # The ordered action list for a found transition (design section 10.3 step 15).
     # External (the default) emits Exit(source), Transition, Entry(target); an
     # internal self-transition suppresses Exit and Entry and emits Transition only
-    # (design section 9.1). Decision A: the Transition action carries the target
-    # state id; the design fixes the kind order but leaves the middle action's
-    # state_id to the implementer.
+    # (design section 9.1). The design fixes the kind order (design section 10.3
+    # step 15) but leaves the middle action's state_id to the implementation; this
+    # implementation has the Transition action carry the target state id.
     private def transition_actions(source : StateDefinition(T), transition : Transition(T), target : StateDefinition(T)) : Array(Action(T))
       return [Action(T).new(ActionKind::Transition, target.id, transition.callback)] if transition.internal?
 

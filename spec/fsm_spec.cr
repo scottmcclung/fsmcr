@@ -1,9 +1,9 @@
 require "./spec_helper"
 require "wait_group"
 
-# Service(T) is the synchronous interpreter (design sections 8.1 and 10.2). This
-# spec ports the pre-rewrite behavioral coverage onto the new construction API:
-# a machine is built with `Machine(T).build`, and `Service(T).interpret` runs it.
+# Service(T) is the synchronous interpreter (design sections 8.1 and 10.2). These
+# specs build a machine with `Machine(T).build` and run it with
+# `Service(T).interpret`, exercising the interpreter's behavioral surface.
 #
 # Note (design section 3.3, D18): `current_state` returns the cached `State`
 # snapshot, so these specs read the id off it with `current_state.id`, and
@@ -74,8 +74,6 @@ describe FSM::Service do
       m.state("state2") { |s| }
     end
 
-    # The observer payload is fsmcr-crj's scope; this issue only asserts the
-    # observer fires, so the yielded argument is intentionally not annotated.
     service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "state1", FSM::Context.new) do |observers|
       observers.on_transition { |_snapshot| observer_fired = true }
     end

@@ -6,13 +6,9 @@ require "./spec_helper"
 #   enum Status { Success; Failed }
 #
 # By design the type does not enforce the invariant that Success carries no error
-# and Failed carries one; construction is expected to maintain it. This issue
-# (fsmcr-bfn.2) delivers the type and its shape. The snapshot being the return
-# value of Service#send and Service#current_state is spec'd separately (D18); this
-# spec covers only the struct itself.
-#
-# Open question for the implementer: the exact constructor keyword arguments. These
-# specs assume `State.new(id:, status:, error:)`.
+# and Failed carries one; construction is expected to maintain it. The snapshot being
+# the return value of Service#send and Service#current_state is spec'd separately
+# (D18); this spec covers only the struct itself.
 describe FSM::State do
   it "constructs a Success snapshot with an id and no error" do
     state : FSM::State = FSM::State.new(id: "idle", status: FSM::Status::Success, error: nil)

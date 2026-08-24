@@ -184,8 +184,8 @@ end
 # both, which is the unchanged current state (design section 10.3 steps 14, 18; section
 # 10.2 step 15 table). The failed step is covered above.
 #
-# These send-return assertions compile against send's existing State return today; the
-# `current_state.should eq result` lines are the D18 reads that gate the file to red.
+# Each case asserts both the snapshot send returns and that current_state caches the
+# same value (D18).
 describe "Service#send return-value matrix by transition outcome (design section 3.3)" do
   it "successful transition to a different state: new id, Success, no error" do
     machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("world") do |m|

@@ -316,9 +316,9 @@ describe FSM::Context do
     end
 
     it "returns the removed value when the key was present" do
-      # Spec-writer-decided contract, flagged in the report: delete mirrors Crystal's
-      # Hash#delete, which returns the value that was removed. Context wraps a Hash, so
-      # matching Hash#delete keeps the bucket's surface consistent with the type it is.
+      # delete mirrors Crystal's Hash#delete, which returns the value that was removed.
+      # Context wraps a Hash, so matching Hash#delete keeps the bucket's surface
+      # consistent with the type it is.
       ctx : FSM::Context = FSM::Context.new
       ctx.set("count", 42)
 

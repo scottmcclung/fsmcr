@@ -38,8 +38,9 @@ module FSM
   # `blocked` holds the target state ids of every candidate that rejected, in
   # registration order, collected while resolution walked the candidates (design
   # section 9, D12). The Blocked action's callback closes over these ids so an
-  # on_blocked handler can name what was blocked without re-evaluating any guard
-  # (the tge-teg double-evaluation regression, design section 9). The ids are
+  # on_blocked handler can name what was blocked without re-evaluating any guard,
+  # which is the double-evaluation regression that design section 9 prevents (tge-teg
+  # in the fork this library descends from). The ids are
   # strings, so carrying them does not make the outcome generic.
   struct TransitionsBlocked
     getter blocked : Array(String)

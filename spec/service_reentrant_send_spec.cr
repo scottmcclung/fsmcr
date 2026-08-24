@@ -10,14 +10,6 @@ require "./spec_helper"
 # what the alternative would do, and Crystal's checked mutex raises "Can't lock mutex
 # recursively" there, which is why queue-and-drain is the design (issue fsmcr-999).
 #
-# STATUS OF THESE SPECS. Every example here asserts the queue-and-drain behavior the
-# design mandates, which src/fsm/service.cr does NOT yet implement. Today a reentrant
-# send re-enters the checked mutex, the raise is caught by send's failure envelope, and
-# the OUTER send returns a Failed snapshot carrying the deadlock while the inner event
-# is lost (verified 2026-08-25 on main, issue fsmcr-999 NOTES). So every example below
-# is RED until the queue-and-drain implementation lands. None of them pin already-correct
-# behavior, because the reentrant path is wholly broken today; each is annotated RED.
-#
 # The service reference is closed over a local (`svc`) that is nil while the machine
 # builds and is assigned right after interpret returns. A callback proc captures the
 # variable by reference, so by the time a callback runs during send, `svc` holds the
@@ -66,8 +58,6 @@ require "./spec_helper"
 #      still queued. Here the failing step is the OUTER one, so nothing drains at all.
 describe "Service#send reentrant from a callback (queue-and-drain, design section 10.3 step 21, 10.4)" do
   describe "queue-and-drain instead of deadlock" do
-    # RED: today the inner send re-enters the mutex and raises; the outer send returns a
-    # Failed deadlock snapshot and never reaches "settled".
     it "does not deadlock or raise, and drives the machine to the final drained state" do
       ctx : TurnContext = TurnContext.new
       svc : FSM::Service(TurnContext)? = nil
@@ -98,7 +88,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
       service.current_state.id.should eq "settled"
     end
 
-    # RED: same queue-and-drain path reached from a transition callback (t.on) rather
+    # The same queue-and-drain path reached from a transition callback (t.on) rather
     # than an entry callback. Both run during step 17, so both queue identically.
     it "queues an event fired from a transition callback (t.on), draining after commit" do
       ctx : TurnContext = TurnContext.new
@@ -128,9 +118,9 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
       service.current_state.id.should eq "settled"
     end
 
-    # RED: proves the queued event runs AFTER the current callback fully returns and the
-    # transition commits, not recursively mid-callback (section 10.4). The log order is
-    # the observable evidence: "b" finishes entering before "settled" is entered.
+    # The queued event runs AFTER the current callback fully returns and the transition
+    # commits, not recursively mid-callback (section 10.4). The log order is the
+    # observable evidence: "b" finishes entering before "settled" is entered.
     it "commits the current transition fully before the queued event's step runs" do
       ctx : TurnContext = TurnContext.new
       svc : FSM::Service(TurnContext)? = nil
@@ -163,7 +153,6 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
   end
 
   describe "the outer send's return value (design-silent decision 2, section 10.5 step 22)" do
-    # RED: today the outer send returns a Failed deadlock snapshot with id "a".
     it "returns the outer event's own committed snapshot, not the final drained state" do
       ctx : TurnContext = TurnContext.new
       svc : FSM::Service(TurnContext)? = nil
@@ -199,7 +188,6 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
   end
 
   describe "the inner reentrant send's return value (design-silent decision 1)" do
-    # RED: today the inner send raises before returning, so nothing is captured.
     it "returns the interpreter's current snapshot; the queued event is not yet applied" do
       ctx : TurnContext = TurnContext.new
       svc : FSM::Service(TurnContext)? = nil
@@ -237,7 +225,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
   end
 
   describe "FIFO ordering and multi-level cascade (section 10.3 step 21)" do
-    # RED: multiple events queued from one callback drain in the order they were queued.
+    # Multiple events queued from one callback drain in the order they were queued.
     it "drains multiple events queued by one callback in FIFO order" do
       ctx : TurnContext = TurnContext.new
       svc : FSM::Service(TurnContext)? = nil
@@ -270,7 +258,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
       ctx.log.should eq ["first", "second"]
     end
 
-    # RED: a drained event's callback may queue further events; those drain in order
+    # A drained event's callback may queue further events; those drain in order
     # after it, each looping back through the full step sequence (section 10.3 step 21).
     it "drains events queued by a drained event's callback (multi-level cascade), in order" do
       ctx : TurnContext = TurnContext.new
@@ -311,11 +299,9 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
   end
 
   describe "observers fire once per drained event (section 10.3 step 20-21, D19)" do
-    # RED: each drained event loops back through the full step sequence, so observers
-    # fire once PER event: the outer "go" step and the drained "next" step here, giving
-    # two successful transitions and two after-every-step fires. Today the outer step
-    # fails on the deadlock, so on_transition never fires and on_event_processed fires
-    # once for the single failed step.
+    # Each drained event loops back through the full step sequence, so observers fire
+    # once PER event: the outer "go" step and the drained "next" step here, giving two
+    # successful transitions and two after-every-step fires.
     it "fires on_transition and on_event_processed once for each drained event" do
       ctx : TurnContext = TurnContext.new
       svc : FSM::Service(TurnContext)? = nil
@@ -349,7 +335,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
   end
 
   describe "a transaction failure during the drain (design-silent decision 3; AsyncService cascade precedent)" do
-    # RED: a drained event whose callback raises yields a Failed snapshot for that step
+    # A drained event whose callback raises yields a Failed snapshot for that step
     # (the 1uo envelope), and the drain HALTS, so a later queued event is lost. The
     # outer send still returns its own committed snapshot.
     it "halts the drain when a drained event's callback raises, losing later queued events" do
@@ -393,7 +379,7 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
   end
 
   describe "an observer exception during the drain (design-silent decision 4; fsmcr-1uo scope note)" do
-    # RED: an observer that raises on an earlier drained event aborts the drain before
+    # An observer that raises on an earlier drained event aborts the drain before
     # later events run, and the exception re-raises from the outer send after that
     # event's observers fired. Events still queued are lost.
     it "aborts the drain and re-raises from the outer send, losing later queued events" do
@@ -453,8 +439,6 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
     # the queue-and-drain specs above check the entry-callback and transition-callback
     # paths separately.
 
-    # RED before the fast path: a transition callback (t.on) reading current_state and
-    # matches? deadlocks on the checked mutex, and the outer step returns Failed.
     it "reads the pre-commit state from a transition callback (t.on) without deadlocking, and still commits" do
       ctx : TurnContext = TurnContext.new
       svc : FSM::Service(TurnContext)? = nil
@@ -502,7 +486,6 @@ describe "Service#send reentrant from a callback (queue-and-drain, design sectio
       seen_matches_b.should eq false
     end
 
-    # RED before the fast path: same reads from an entry callback also deadlock today.
     it "reads the pre-commit state from an entry callback without deadlocking, and still commits" do
       ctx : TurnContext = TurnContext.new
       svc : FSM::Service(TurnContext)? = nil

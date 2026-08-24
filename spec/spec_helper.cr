@@ -14,9 +14,12 @@ require "../src/fsm"
 # than one worker. It also puts every existing spawn-based spec under genuine
 # parallelism rather than only the ones that opt in. `default_workers_count` is the
 # CPU-derived worker count; `Math.max(2, ...)` guarantees the "more than one worker"
-# criterion even where that count reports 1. CRYSTAL_WORKERS alone does nothing here,
-# and -Dpreview_mt selects the legacy scheduler that has no Fiber::ExecutionContext at
-# all (design section 2), so neither is a route to this.
+# criterion even where that count reports 1. CRYSTAL_WORKERS alone does nothing here.
+# -Dpreview_mt alone selects the legacy scheduler, under which Fiber::ExecutionContext
+# is never required and referencing it fails as an undefined constant (design section
+# 2). The two flags together, -Dpreview_mt -Dexecution_context, remain supported and
+# keep execution contexts, but still leave the default context at one worker (design
+# section 15). So none of these substitutes for the resize call below.
 Fiber::ExecutionContext.default.resize(Math.max(2, Fiber::ExecutionContext.default_workers_count))
 
 # A spec-defined domain context used as the generic parameter `T`. Per design
