@@ -1,8 +1,7 @@
 require "./spec_helper"
 require "./support/plan_probe"
 
-# The pure core: plan and the action list (design section 7, section 10.2 steps
-# 9-16, D7).
+# The pure core: plan and the action list.
 #
 # `plan(state, event, context) : Plan(T)` selects the transition, evaluates guards,
 # and computes an ordered action list. It executes NOTHING. Actions are tagged with
@@ -13,7 +12,7 @@ require "./support/plan_probe"
 #   struct Action(T) { kind : ActionKind; state_id : String; callback : (String, T) -> }
 #   struct Plan(T)   { outcome; next_state : StateDefinition(T); actions : Array(Action(T)) }
 #
-# Action table (design section 10.2 step 15):
+# Action table:
 #   TransitionFound, different state          -> [Exit(current), Transition, Entry(next)]
 #   TransitionFound, same state, external     -> the same three (see self_transition_spec)
 #   TransitionFound, same state, internal     -> [Transition] only (see self_transition_spec)
@@ -22,10 +21,10 @@ require "./support/plan_probe"
 #
 # TransitionsBlocked is empty here because no on_blocked handler is registered for
 # the event; see spec/on_blocked_spec.cr for the handler-registered case where plan
-# emits a Blocked action (fsmcr-bfn.4). EventNotRecognized is empty here because no
+# emits a Blocked action. EventNotRecognized is empty here because no
 # on_unknown_event handler is registered on the state; see
 # spec/on_unknown_event_spec.cr for the handler-registered case where plan emits an
-# UnknownEvent action (fsmcr-bfn.5). Only the emptiness of the action list is
+# UnknownEvent action. Only the emptiness of the action list is
 # asserted here.
 describe "plan" do
   it "emits Exit(current), Transition, Entry(next) for a transition to a different state" do
@@ -52,7 +51,7 @@ describe "plan" do
     plan.next_state.id.should eq "clearing"
 
     # The Exit action names the state being left; the Entry action names the state
-    # being entered (design section 7). The Transition action's state_id is left
+    # being entered. The Transition action's state_id is left
     # unasserted; the design fixes the kind order but not what state_id the middle
     # action carries.
     plan.actions[0].state_id.should eq "cave"
@@ -99,7 +98,7 @@ describe "plan" do
 
     FSM::PlanProbe.plan(machine, machine.states["cave"], "north", ctx)
 
-    # plan decides; it never executes (design section 7). No exit, transition, or
+    # plan decides; it never executes. No exit, transition, or
     # entry callback ran, so the side-channel log stays empty.
     ctx.log.should be_empty
   end
@@ -142,10 +141,10 @@ describe "plan" do
     plan : FSM::Plan(TurnContext) = FSM::PlanProbe.plan(machine, machine.states["cave"], "north", ctx)
 
     # The Blocked action needs an on_blocked handler for the event; this state
-    # registers none, so the list is empty (design section 10.2 step 15). See
+    # registers none, so the list is empty. See
     # spec/on_blocked_spec.cr for the handler-registered case.
     plan.actions.should be_empty
-    # The destination for a blocked step is the unchanged current state (step 14).
+    # The destination for a blocked step is the unchanged current state.
     plan.next_state.id.should eq "cave"
   end
 
@@ -163,17 +162,17 @@ describe "plan" do
     plan : FSM::Plan(TurnContext) = FSM::PlanProbe.plan(machine, machine.states["cave"], "xyzzy", ctx)
 
     # The UnknownEvent action needs an on_unknown_event handler for the event; this
-    # state registers none, so the list is empty (design section 10.2 step 15). See
+    # state registers none, so the list is empty. See
     # spec/on_unknown_event_spec.cr for the handler-registered case.
     plan.actions.should be_empty
-    # Destination for an unrecognized event is the unchanged current state (step 14).
+    # Destination for an unrecognized event is the unchanged current state.
     plan.next_state.id.should eq "cave"
   end
 
   it "defines all five ActionKind variants" do
     # All five variants exist. plan emits Blocked when the state has an on_blocked
-    # handler (fsmcr-bfn.4) and UnknownEvent when the state has an on_unknown_event
-    # handler (fsmcr-bfn.5); see the respective specs (design section 7).
+    # handler and UnknownEvent when the state has an on_unknown_event
+    # handler; see the respective specs.
     kinds : Array(FSM::ActionKind) = [
       FSM::ActionKind::Exit,
       FSM::ActionKind::Transition,
@@ -185,10 +184,10 @@ describe "plan" do
   end
 end
 
-# `plan` is protected and not public API (design section 7, D7). A caller outside
+# `plan` is protected and not public API. A caller outside
 # the FSM namespace cannot reach it. This compiles a tiny program that calls `plan`
 # from the top level and asserts the compile fails naming a protected-visibility
-# error. It is the D7 counterpart to nil_context_spec's compile probe.
+# error. It is the counterpart to nil_context_spec's compile probe.
 describe "plan visibility" do
   it "is not callable from outside the FSM namespace" do
     program : String = <<-CRYSTAL

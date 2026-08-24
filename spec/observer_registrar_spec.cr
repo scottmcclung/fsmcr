@@ -1,14 +1,13 @@
 require "./spec_helper"
 
-# Observers registered by construction (design section 9, section 10.3 step 20,
-# D19, fsmcr-erl).
+# Observers registered by construction.
 #
 # The mutable registration setters Service#on_transition and Service#on_event_processed
 # are gone. A live service has no observer setter. Instead Service.interpret takes an
 # optional builder block and yields an observer registrar. Observers are collected in
 # the registrar during the block and copied once into the service at construction, the
-# same build-then-seal idiom the Machine and State builders use (design section 4,
-# section 5): a partially-built thing is registered inside the block and frozen at the
+# same build-then-seal idiom the Machine and State builders use: a partially-built thing
+# is registered inside the block and frozen at the
 # end, so no caller can mutate observers on the live interpreter.
 #
 #     service = FSM::Service.interpret(machine, "idle", ctx) do |observers|
@@ -16,7 +15,7 @@ require "./spec_helper"
 #       observers.on_transition { |snapshot| audit.record(snapshot.id) }
 #     end
 #
-# The firing contract is unchanged from the setter era (design section 9, D19): on_transition
+# The firing contract is unchanged from the setter era: on_transition
 # fires only on a completed transition; on_event_processed fires after every step regardless
 # of outcome and receives the snapshot the step produced; on_transition runs before
 # on_event_processed on success; on a failed step on_transition is silent and on_event_processed
@@ -27,7 +26,7 @@ require "./spec_helper"
 # no-block overload, last-wins within the block, and the registrar going inert after interpret
 # returns.
 #
-# Inert-after-return precedent (design section 5): StateDefinition and Transition raise
+# Inert-after-return precedent: StateDefinition and Transition raise
 # SealedStateError from every builder method once the machine seals them. The registrar follows
 # the same precedent. Once interpret has copied the observers and returned, calling on_transition
 # or on_event_processed on the escaped registrar raises SealedStateError.
@@ -50,7 +49,7 @@ describe "Service observer registrar" do
     snapshot : FSM::State? = captured
     snapshot.should be_a(FSM::State)
     if snapshot
-      # The observer receives the snapshot the step produced (step 20): the new state.
+      # The observer receives the snapshot the step produced: the new state.
       snapshot.id.should eq "clearing"
       snapshot.status.should eq FSM::Status::Success
     end
@@ -90,8 +89,8 @@ describe "Service observer registrar" do
 
     service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
       # Registered on_event_processed first to show the firing order is fixed by the
-      # step-20 sequence (on_transition, then on_event_processed), not by registration
-      # order (design section 10.3 step 20).
+      # firing sequence (on_transition, then on_event_processed), not by registration
+      # order.
       observers.on_event_processed { |_snapshot| order << "processed" }
       observers.on_transition { |_snapshot| order << "transition" }
     end
@@ -122,7 +121,7 @@ describe "Service observer registrar" do
     service.send("north")
 
     # "after every step" fires on a blocked event; "on change" does not, because
-    # nothing changed (design section 9).
+    # nothing changed.
     processed_fired.should be_true
     transition_fired.should be_false
   end
@@ -160,8 +159,8 @@ describe "Service observer registrar" do
     machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
       m.state("cave") { |s| s.on_event("north", "clearing") }
       m.state("clearing") do |s|
-        # Entering "clearing" raises, so the step fails part-way and never commits
-        # (design section 11): the state pointer stays at "cave".
+        # Entering "clearing" raises, so the step fails part-way and never commits:
+        # the state pointer stays at "cave".
         s.on_entry { |_e, _c| raise boom }
       end
     end
@@ -171,14 +170,14 @@ describe "Service observer registrar" do
       observers.on_event_processed { |snapshot| captured = snapshot }
     end
 
-    # The returning path surfaces failure as a value, not a raise (design section 11).
+    # The returning path surfaces failure as a value, not a raise.
     result : FSM::State = service.send("north")
 
     result.status.should eq FSM::Status::Failed
     result.error.should eq boom
     result.id.should eq "cave"
 
-    # on_event_processed fired and received the Failed snapshot (D19).
+    # on_event_processed fired and received the Failed snapshot.
     snapshot : FSM::State? = captured
     snapshot.should be_a(FSM::State)
     if snapshot
@@ -187,7 +186,7 @@ describe "Service observer registrar" do
       snapshot.id.should eq "cave"
     end
 
-    # on_transition did not fire, because no transition completed (D19).
+    # on_transition did not fire, because no transition completed.
     transition_fired.should be_false
   end
 
@@ -204,10 +203,10 @@ describe "Service observer registrar" do
     end
 
     service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
-      # The observer raises while handling the failed step. Per design section 9 the
+      # The observer raises while handling the failed step. The
       # first exception (the callback's) is already recorded in the snapshot, so the
       # observer's own exception must be discarded and the returning path must still
-      # hand back the Failed value rather than raising observer_error (design section 11).
+      # hand back the Failed value rather than raising observer_error.
       observers.on_event_processed { |_snapshot| raise observer_error }
     end
 
@@ -232,10 +231,10 @@ describe "Service observer registrar" do
     end
 
     service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx) do |observers|
-      # A blocked step is a successful transaction that moved nowhere (design section
-      # 3.3), so its snapshot status is Success. The observer runs unguarded on a
+      # A blocked step is a successful transaction that moved nowhere,
+      # so its snapshot status is Success. The observer runs unguarded on a
       # non-failed snapshot, so an exception it raises propagates out of send rather
-      # than being discarded (design section 9).
+      # than being discarded.
       observers.on_event_processed { |_snapshot| raise observer_error }
     end
 
@@ -305,7 +304,7 @@ describe "Service observer registrar" do
     escaped.should be_a(FSM::ObserverRegistrar)
     if escaped
       # Mirroring StateDefinition and Transition, whose builder methods raise
-      # SealedStateError once the machine seals them (design section 5). The registrar
+      # SealedStateError once the machine seals them. The registrar
       # is frozen when interpret returns, so late registration through the escaped
       # reference cannot mutate the live service's observers.
       expect_raises(FSM::SealedStateError) do

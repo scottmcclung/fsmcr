@@ -1,8 +1,7 @@
 require "./spec_helper"
 require "wait_group"
 
-# Genuine cross-thread contention on a single Service instance's send path
-# (design section 8.1, section 10.7, section 12.2; fsmcr-9ct).
+# Genuine cross-thread contention on a single Service instance's send path.
 #
 # spec_helper resizes the default execution context to more than one worker, so the
 # fibers spawned below run on separate worker threads at the same time. That is the
@@ -13,8 +12,8 @@ require "wait_group"
 # Each detector is built to fail if @transition_mutex is removed from Service#send.
 # Two mechanics make the failure reliable rather than a coin-flip:
 #
-#   1. Every callback contains a Fiber.yield. The transition callback runs at step
-#      17 of the lifecycle, inside the critical section (design section 10.7). When
+#   1. Every callback contains a Fiber.yield. The transition callback runs
+#      inside the critical section. When
 #      the mutex is present the fiber keeps the lock across the yield, so no other
 #      send body can interleave and the operation still completes correctly. When the
 #      mutex is absent the yield hands a whole scheduler slot to another fiber on
@@ -24,7 +23,7 @@ require "wait_group"
 #   2. The contexts carry plain fields with no lock of their own, so the interpreter's
 #      mutex is the only thing that can serialize the work. FSM::Context is avoided on
 #      purpose: its internal lock would serialize each field access and mask a missing
-#      Service mutex (design section 12.5).
+#      Service mutex.
 
 # A domain context (the generic T) whose counter has no lock of its own. The only
 # thing that can serialize concurrent increments is Service#@transition_mutex. The
@@ -64,7 +63,7 @@ describe "FSM::Service under real parallel contention" do
     ctx : SharedCounter = SharedCounter.new
 
     # A self-transition on "tick" keeps the machine in "counting" and runs the
-    # transition callback once per send (design section 9.1, external default).
+    # transition callback once per send (external default).
     machine : FSM::Machine(SharedCounter) = FSM::Machine(SharedCounter).build("counter") do |m|
       m.state("counting") do |s|
         s.on_event("tick", "counting") do |t|
@@ -155,7 +154,7 @@ describe "FSM::Service under real parallel contention" do
   it "keeps the interpreter consistent and raises nothing while many fibers drive a ring of states" do
     # A ten-state ring where every state advances to the next on "advance". Different
     # fibers read and commit @state concurrently. This is a robustness check that the
-    # suite runs green under real parallelism (design section 12): no torn read of the
+    # suite runs green under real parallelism: no torn read of the
     # cached snapshot crashes a step, every send returns a Success snapshot, and the
     # interpreter always sits in one of the ring's states. It is not a lost-update
     # detector; the two specs above are.

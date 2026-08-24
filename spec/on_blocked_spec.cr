@@ -1,28 +1,28 @@
 require "./spec_helper"
 require "./support/plan_probe"
 
-# The per-event on_blocked handler (design section 9, section 13.3, D12).
+# The per-event on_blocked handler.
 #
 # `s.on_blocked(event) { |event, context, blocked| ... }` fires when the state has
 # at least one transition registered for the event and every candidate guard
 # returned false. It is keyed per event: different blocked events want different
 # messages. It does NOT fire for an unknown event (no transition registered at all),
-# and it does NOT fire when any transition succeeds (design section 9).
+# and it does NOT fire when any transition succeeds.
 #
-# Payload (D12, design sections 9 and 15): the third block parameter `blocked`
+# Payload: the third block parameter `blocked`
 # carries an Array(String) of the blocked target state ids. That lighter form is
 # preferred over handing out the Transition objects, and it keeps Transition off the
 # public surface. The point of passing what was blocked is that a handler can produce
 # a specific reason WITHOUT re-running any guard predicate.
 #
 # Where a blocked step is observed: `plan` emits a single Blocked action for the
-# event when a handler is registered, else an empty action list (design section 10.2
-# step 15). The interpreter runs that action like any other, so on_blocked fires
+# event when a handler is registered, else an empty action list. The interpreter runs
+# that action like any other, so on_blocked fires
 # end-to-end through Service#send. These specs assert on both layers, mirroring
 # self_transition_spec: the pure core (the Blocked action in the plan) and the
 # end-to-end path (Service running it).
 describe "on_blocked" do
-  # --- The pure core: the Blocked action in the plan (design section 10.2 step 15) ---
+  # --- The pure core: the Blocked action in the plan ---
 
   it "emits a single Blocked action for a registered event whose guards all reject when a handler is registered" do
     ctx : TurnContext = TurnContext.new(rope_secured: false)
@@ -38,12 +38,12 @@ describe "on_blocked" do
     plan : FSM::Plan(TurnContext) = FSM::PlanProbe.plan(machine, machine.states["cave"], "north", ctx)
 
     # A registered handler turns the empty blocked action list (see plan_spec) into a
-    # single Blocked action carrying the unchanged current state id (design table
-    # entry `Blocked(cave, "north")`).
+    # single Blocked action carrying the unchanged current state id (the
+    # `Blocked(cave, "north")` action).
     plan.actions.map(&.kind).should eq [FSM::ActionKind::Blocked]
     plan.actions[0].state_id.should eq "cave"
 
-    # The destination for a blocked step is the unchanged current state (step 14).
+    # The destination for a blocked step is the unchanged current state.
     plan.next_state.id.should eq "cave"
   end
 
@@ -65,8 +65,7 @@ describe "on_blocked" do
 
     plan : FSM::Plan(TurnContext) = FSM::PlanProbe.plan(machine, machine.states["cave"], "north", ctx)
 
-    # Purity: planning decides but runs nothing, so the handler has not fired yet
-    # (design section 7).
+    # Purity: planning decides but runs nothing, so the handler has not fired yet.
     seen_event.should be_nil
     seen_blocked.should be_nil
 
@@ -82,8 +81,7 @@ describe "on_blocked" do
     ctx : TurnContext = TurnContext.new(rope_secured: false)
 
     # Two guarded events; a handler for only one of them. Sending the other blocked
-    # event must produce no Blocked action (design section 10.2 step 15: empty when no
-    # handler is registered).
+    # event must produce no Blocked action (empty when no handler is registered).
     machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
       m.state("cave") do |s|
         s.on_event("north", "clearing") { |t| t.guard { |_e, c| c.rope_secured } }
@@ -134,7 +132,7 @@ describe "on_blocked" do
     end
 
     # "xyzzy" has no transition registered, so the outcome is EventNotRecognized, which
-    # on_blocked never fires for (design section 9).
+    # on_blocked never fires for.
     plan : FSM::Plan(TurnContext) = FSM::PlanProbe.plan(machine, machine.states["cave"], "xyzzy", ctx)
 
     plan.actions.should be_empty
@@ -159,11 +157,11 @@ describe "on_blocked" do
     plan.actions[0].callback.call("open", ctx)
 
     # Both candidates were blocked, so the handler receives both target ids in the
-    # order they were registered (criterion 7).
+    # order they were registered.
     seen_blocked.should eq ["opened", "forced"]
   end
 
-  # --- End-to-end through the synchronous interpreter (design section 10.3) ---
+  # --- End-to-end through the synchronous interpreter ---
 
   it "fires on_blocked when the event is registered and every guard rejects (Service)" do
     ctx : TurnContext = TurnContext.new(rope_secured: false)
@@ -180,7 +178,7 @@ describe "on_blocked" do
     service.send("north")
 
     ctx.log.should eq ["too steep without a rope"]
-    # A blocked step is a successful transaction that moved nowhere (design section 3.3).
+    # A blocked step is a successful transaction that moved nowhere.
     service.current_state.id.should eq "cave"
   end
 
@@ -198,8 +196,8 @@ describe "on_blocked" do
     service : FSM::Service(TurnContext) = FSM::Service(TurnContext).interpret(machine, "cave", ctx)
     service.send("xyzzy")
 
-    # No transition is registered for "xyzzy" at all, so on_blocked must stay silent
-    # (design section 9). on_unknown_event is a separate handler (fsmcr-bfn.5).
+    # No transition is registered for "xyzzy" at all, so on_blocked must stay silent.
+    # on_unknown_event is a separate handler.
     ctx.log.should be_empty
     service.current_state.id.should eq "cave"
   end
@@ -228,7 +226,7 @@ describe "on_blocked" do
     machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
       m.state("cave") do |s|
         # First candidate rejects, second candidate passes: the event is not blocked
-        # because some transition succeeded (design section 9).
+        # because some transition succeeded.
         s.on_event("north", "clearing") { |t| t.guard { |_e, _c| false } }
         s.on_event("north", "tunnel") { |t| t.guard { |_e, _c| true } }
         s.on_blocked("north") { |_e, c, _blocked| c.say("blocked") }
@@ -267,8 +265,7 @@ describe "on_blocked" do
     # Counts every evaluation of the guard predicate. If the on_blocked path re-ran the
     # guard to work out why the event was blocked, this would climb past one. The
     # handler instead reads the blocked target ids and never touches the predicate.
-    # This is the double-evaluation regression that design section 9 prevents (tge-teg in the
-    # fork this library descends from).
+    # This is the double-evaluation regression the design prevents.
     guard_evaluations : Int32 = 0
     reason : String? = nil
 

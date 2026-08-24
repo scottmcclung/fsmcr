@@ -1,17 +1,17 @@
 require "./spec_helper"
 require "wait_group"
 
-# Specs for FSM::Context#get / #set / #modify (design section 3.2, section 12.5).
+# Specs for FSM::Context#get / #set / #modify.
 #
-# FSM::Context is the hash-and-mutex bucket the library ships as one selectable T
-# (design section 3.2). It stores FSM::Any values behind a mutex and exposes
+# FSM::Context is the hash-and-mutex bucket the library ships as one selectable T.
+# It stores FSM::Any values behind a mutex and exposes
 # get/set/modify. These specs pin the CURRENT contract of those three methods.
 #
-# Missing-key behavior for get/modify stays pinned to KeyError (design section 3.2 names
-# the missing-key KeyError as a rough edge, but the existing get/modify contract is left
-# raising on purpose). fsmcr-54d ADDS non-raising accessors alongside them: get?, fetch,
+# Missing-key behavior for get/modify stays pinned to KeyError: the missing-key KeyError
+# is a rough edge, but the existing get/modify contract is left
+# raising on purpose. Non-raising accessors are added alongside them: get?, fetch,
 # has_key?, and delete. The specs below the get/set/modify block pin that new surface.
-# Each new method is mutex-synchronized like the existing three (design section 12.5).
+# Each new method is mutex-synchronized like the existing three.
 #
 # Values come back as the FSM::Any union (get returns Any, modify's block receives
 # Any). Comparisons against a literal need no cast, but arithmetic on a returned value
@@ -29,9 +29,9 @@ describe FSM::Context do
     end
 
     it "raises KeyError for a key that was never set" do
-      # Pins the CURRENT contract (design section 3.2). Hash#[] raises KeyError on a
-      # missing key and #get forwards that through the mutex. fsmcr-54d will add a
-      # non-raising accessor; until then a missing key raises.
+      # Pins the CURRENT contract. Hash#[] raises KeyError on a
+      # missing key and #get forwards that through the mutex. #get? is the
+      # non-raising accessor; #get itself keeps raising.
       ctx : FSM::Context = FSM::Context.new
 
       expect_raises(KeyError) { ctx.get("missing") }
@@ -91,7 +91,7 @@ describe FSM::Context do
     end
 
     it "raises KeyError when the key was never set and never calls the block" do
-      # Pins the CURRENT contract (design section 3.2). modify reads @data[key] before
+      # Pins the CURRENT contract. modify reads @data[key] before
       # calling the block, so a missing key raises KeyError and the block never runs.
       ctx : FSM::Context = FSM::Context.new
       called : Bool = false
@@ -106,9 +106,9 @@ describe FSM::Context do
       called.should be_false
     end
 
-    # The compound read-modify-write atomicity contract (design section 12.5).
+    # The compound read-modify-write atomicity contract.
     #
-    # Section 12.5 is explicit: `ctx.set("n", ctx.get("n") + 1)` races even with the
+    # The atomicity contract is explicit: `ctx.set("n", ctx.get("n") + 1)` races even with the
     # mutex, because it is two separately locked operations with an unlocked gap, while
     # `ctx.modify("n") { |v| v + 1 }` does not, because the read, the block, and the
     # write all happen under one lock hold.
@@ -170,8 +170,8 @@ describe FSM::Context do
     end
   end
 
-  # get? is the non-raising getter fsmcr-54d adds (design section 3.2 names the missing-key
-  # KeyError as the rough edge; get? is the issue-prescribed remedy). Where get forwards
+  # get? is the non-raising getter. The missing-key KeyError is the rough edge get?
+  # remedies. Where get forwards
   # Hash#[] and raises on a missing key, get? forwards Hash#[]? and returns nil for it.
   describe "#get?" do
     it "returns the value a prior #set stored" do
@@ -183,7 +183,7 @@ describe FSM::Context do
 
     it "returns nil for a key that was never set instead of raising" do
       # The contrast with #get, which raises KeyError on the same missing key. get? is
-      # the non-raising accessor promised in design section 3.2.
+      # the non-raising accessor.
       ctx : FSM::Context = FSM::Context.new
 
       ctx.get?("missing").should be_nil
@@ -218,7 +218,7 @@ describe FSM::Context do
     end
   end
 
-  # fetch(key, default) is the fetch-with-default accessor from design section 3.2. It
+  # fetch(key, default) is the fetch-with-default accessor. It
   # returns the stored value when present and the supplied default when absent, and it
   # never mutates the context: a defaulted lookup does not store the default.
   describe "#fetch" do
@@ -258,7 +258,7 @@ describe FSM::Context do
     end
   end
 
-  # has_key? is the presence test from design section 3.2. It reports whether a key is
+  # has_key? is the presence test. It reports whether a key is
   # present regardless of the stored value, which is what lets get? and a stored nil be
   # told apart.
   describe "#has_key?" do
@@ -277,7 +277,7 @@ describe FSM::Context do
 
     it "is true when the stored value is nil, distinguishing presence from absence" do
       # Presence is about the key, not the value. A key whose value is nil is present,
-      # so has_key? is true even though get? on it returns nil (design section 3.2, the
+      # so has_key? is true even though get? on it returns nil (the
       # FSM::Any-includes-Nil wrinkle).
       ctx : FSM::Context = FSM::Context.new
       ctx.set("maybe", nil)
@@ -294,7 +294,7 @@ describe FSM::Context do
     end
   end
 
-  # delete removes a key from the context (design section 3.2). Its return value follows
+  # delete removes a key from the context. Its return value follows
   # Crystal's Hash#delete convention.
   describe "#delete" do
     it "removes the key so #has_key? is false afterward" do
@@ -334,8 +334,8 @@ describe FSM::Context do
     end
   end
 
-  # Concurrent set/delete/has_key? traffic on one shared context under real parallelism
-  # (design section 12.5; fsmcr-9ct). This is a robustness/smoke check in the style of
+  # Concurrent set/delete/has_key? traffic on one shared context under real parallelism.
+  # This is a robustness/smoke check in the style of
   # the ring test in service_concurrency_spec.cr, not a lost-update detector: it asserts
   # that the shared @data Hash survives concurrent structural mutation from many worker
   # threads without crashing or corrupting, and reaches a deterministic final state.
@@ -344,7 +344,7 @@ describe FSM::Context do
   # fibers below mutate the one underlying Hash from separate worker threads at the same
   # time. A Hash mutated structurally (set grows it, delete shrinks it) from two threads
   # without a lock can crash on a concurrent rehash or corrupt its buckets. The mutex
-  # every Context method holds (design section 12.5) is the only thing serializing that
+  # every Context method holds is the only thing serializing that
   # structural churn here.
   #
   # Determinism. Each fiber owns a distinct key "k#{i}", so no two fibers ever contend

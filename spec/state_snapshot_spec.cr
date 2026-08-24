@@ -1,14 +1,14 @@
 require "./spec_helper"
 
-# The runtime snapshot (design section 3.3, D13). `State` is a non-generic struct
+# The runtime snapshot. `State` is a non-generic struct
 # reporting the outcome of one transaction:
 #   struct State { getter id : String; getter status : Status; getter error : Exception? }
 #   enum Status { Success; Failed }
 #
 # By design the type does not enforce the invariant that Success carries no error
 # and Failed carries one; construction is expected to maintain it. The snapshot being
-# the return value of Service#send and Service#current_state is spec'd separately
-# (D18); this spec covers only the struct itself.
+# the return value of Service#send and Service#current_state is spec'd separately;
+# this spec covers only the struct itself.
 describe FSM::State do
   it "constructs a Success snapshot with an id and no error" do
     state : FSM::State = FSM::State.new(id: "idle", status: FSM::Status::Success, error: nil)

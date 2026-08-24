@@ -1,13 +1,13 @@
 require "./spec_helper"
 
-# Sealing after build (design section 5, D13 and D16).
+# Sealing after build.
 #
 # After `Machine(T).build` returns, every StateDefinition(T) and every
 # Transition(T) it owns is sealed and shared, so mutating them must raise
 # SealedStateError. A sealed StateDefinition is reached through `Machine#states`
 # (its values are the shared sealed objects, not copies). A sealed Transition is
 # reached by capturing the object the builder yields, which is the same object the
-# machine keeps because Transition(T) is a class (design section 5, D16).
+# machine keeps because Transition(T) is a class.
 describe "machine sealing" do
   it "raises when on_event is called on a sealed StateDefinition" do
     machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("test_machine") do |m|
@@ -117,9 +117,9 @@ describe "machine sealing" do
     end
   end
 
-  # Decision C (fsmcr-bfn.3): the internal flag is definition state, so marking a
+  # The internal flag is definition state, so marking a
   # transition internal after seal must raise like `on` and `guard` do. Sealing
-  # means what you built is what runs (design section 5, section 9.1).
+  # means what you built is what runs.
   it "raises when Transition#internal is called after the machine seals the transition" do
     captured : FSM::Transition(FSM::Context)? = nil
 

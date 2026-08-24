@@ -1,29 +1,29 @@
 require "./spec_helper"
 require "./support/plan_probe"
 
-# The state-wide on_unknown_event handler (design section 9, section 13.3, D10).
+# The state-wide on_unknown_event handler.
 #
 # `s.on_unknown_event { |event, context| ... }` fires when the state has NO transition
 # registered for the event at all, turning today's silent no-op into an observable hook.
-# It is state-wide: one handler per state, catching every unregistered event (D10). The
+# It is state-wide: one handler per state, catching every unregistered event. The
 # asymmetry with per-event on_blocked is intentional, because "this event means nothing
 # here" is about events you did not register, and anticipating those individually is a
-# contradiction (design section 9).
+# contradiction.
 #
 # It does NOT fire for a blocked event (transitions exist but every guard rejected, which
-# is on_blocked territory), and it does NOT fire when a transition succeeds (design
-# section 9). The handler receives the event name and the context, matching the
+# is on_blocked territory), and it does NOT fire when a transition succeeds. The handler
+# receives the event name and the context, matching the
 # (event, context) shape of on_entry and on_exit; there are no blocked target ids to pass
 # because no transition was registered.
 #
 # Where an unknown step is observed: `plan` emits a single UnknownEvent action for the
-# event when a handler is registered, else an empty action list (design section 10.2 step
-# 15 table, `EventNotRecognized` row). The interpreter runs that action like any other, so
+# event when a handler is registered, else an empty action list (the `EventNotRecognized`
+# case). The interpreter runs that action like any other, so
 # on_unknown_event fires end-to-end through Service#send. These specs assert on both
 # layers, mirroring on_blocked_spec: the pure core (the UnknownEvent action in the plan)
 # and the end-to-end path (Service running it).
 describe "on_unknown_event" do
-  # --- The pure core: the UnknownEvent action in the plan (design section 10.2 step 15) ---
+  # --- The pure core: the UnknownEvent action in the plan ---
 
   it "emits a single UnknownEvent action for an unregistered event when a handler is registered" do
     ctx : TurnContext = TurnContext.new
@@ -43,7 +43,7 @@ describe "on_unknown_event" do
     plan.actions.map(&.kind).should eq [FSM::ActionKind::UnknownEvent]
     plan.actions[0].state_id.should eq "cave"
 
-    # The destination for an unknown step is the unchanged current state (step 14).
+    # The destination for an unknown step is the unchanged current state.
     plan.next_state.id.should eq "cave"
   end
 
@@ -61,8 +61,7 @@ describe "on_unknown_event" do
 
     plan : FSM::Plan(TurnContext) = FSM::PlanProbe.plan(machine, machine.states["cave"], "xyzzy", ctx)
 
-    # Purity: planning decides but runs nothing, so the handler has not fired yet
-    # (design section 7).
+    # Purity: planning decides but runs nothing, so the handler has not fired yet.
     seen_event.should be_nil
 
     # Running the UnknownEvent action's callback is what fires the handler. It receives the
@@ -76,8 +75,8 @@ describe "on_unknown_event" do
     ctx : TurnContext = TurnContext.new
 
     # A state with a transition but no on_unknown_event handler. Sending an unregistered
-    # event must produce no action (design section 10.2 step 15: empty when no handler is
-    # registered), preserving today's silent no-op.
+    # event must produce no action (empty when no handler is registered), preserving
+    # today's silent no-op.
     machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
       m.state("cave") do |s|
         s.on_event("north", "clearing")
@@ -123,8 +122,7 @@ describe "on_unknown_event" do
     machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
       m.state("cave") do |s|
         # "north" IS registered but its guard rejects, so the outcome is TransitionsBlocked,
-        # which on_unknown_event never fires for (design section 9). That is on_blocked
-        # territory (fsmcr-bfn.4).
+        # which on_unknown_event never fires for. That is on_blocked territory.
         s.on_event("north", "clearing") { |t| t.guard { |_e, c| c.rope_secured } }
         s.on_unknown_event { |_e, c| c.say("unknown") }
       end
@@ -138,7 +136,7 @@ describe "on_unknown_event" do
     plan.next_state.id.should eq "cave"
   end
 
-  # --- End-to-end through the synchronous interpreter (design section 10.3) ---
+  # --- End-to-end through the synchronous interpreter ---
 
   it "fires on_unknown_event when the state has no transition for the event (Service)" do
     ctx : TurnContext = TurnContext.new
@@ -155,7 +153,7 @@ describe "on_unknown_event" do
     service.send("xyzzy")
 
     ctx.log.should eq ["You can't xyzzy here."]
-    # An unknown step is a step that moved nowhere (design section 3.3).
+    # An unknown step is a step that moved nowhere.
     service.current_state.id.should eq "cave"
   end
 
@@ -192,7 +190,7 @@ describe "on_unknown_event" do
     service.send("north")
 
     # "north" is registered but its guard rejected: that is a blocked event, not an unknown
-    # one, so on_unknown_event stays silent (design section 9).
+    # one, so on_unknown_event stays silent.
     ctx.log.should be_empty
     service.current_state.id.should eq "cave"
   end
@@ -244,7 +242,7 @@ describe "on_unknown_event" do
     machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
       m.state("cave") do |s|
         s.on_event("north", "clearing")
-        # A single handler, no event key, catching every unregistered event (D10).
+        # A single handler, no event key, catching every unregistered event.
         s.on_unknown_event { |event, c| c.say("unknown: #{event}") }
       end
       m.state("clearing") { |s| }
@@ -268,7 +266,7 @@ describe "on_unknown_event" do
       end
       m.state("clearing") do |s|
         # An unknown event here, but "clearing" registers no on_unknown_event. The handler on
-        # "cave" must not fire while the interpreter is in "clearing" (D10, one handler per
+        # "cave" must not fire while the interpreter is in "clearing" (one handler per
         # state).
         s.on_event("south", "cave")
       end

@@ -1,13 +1,13 @@
 require "./spec_helper"
 require "./support/plan_probe"
 
-# Transition resolution and the outcome union (design section 6, D3).
+# Transition resolution and the outcome union.
 #
 # One event may have several transitions on a single state, distinguished by
 # guards. `@transitions` becomes Hash(String, Array(Transition(T))) and the builder
 # appends a transition each time `on_event` is called for the same event. A step
 # over a state produces exactly one of three outcomes, which form a union so a
-# consumer can match exhaustively (design section 6):
+# consumer can match exhaustively:
 #
 #   TransitionFound(T) | TransitionsBlocked | EventNotRecognized
 #
@@ -34,13 +34,13 @@ describe "transition resolution" do
     # The subject is annotated with the full union so the exhaustiveness below is
     # honest. Crystal narrows a variable to its assigned value's static type; the
     # `outcome` getter is declared as the full union, so the annotation restates
-    # that and the `case ... in` cannot narrow it away (design section 6).
+    # that and the `case ... in` cannot narrow it away.
     outcome : FSM::TransitionFound(TurnContext) | FSM::TransitionsBlocked | FSM::EventNotRecognized = plan.outcome
 
     case outcome
     in FSM::TransitionFound
       # Inside this branch `outcome` narrows to TransitionFound(TurnContext), so the
-      # `transition` getter (design section 6) is reachable.
+      # `transition` getter is reachable.
       outcome.transition.event.should eq "north"
       outcome.transition.target.should eq "clearing"
     in FSM::TransitionsBlocked
@@ -92,8 +92,8 @@ describe "transition resolution" do
 
     machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
       m.state("door") do |s|
-        # Two transitions on one event, distinguished by guards (design section 6,
-        # section 13.2). Registration order is evaluation order.
+        # Two transitions on one event, distinguished by guards. Registration order
+        # is evaluation order.
         s.on_event("open", "opened") { |t| t.guard { |_e, _c| true } }
         s.on_event("open", "forced") { |t| t.guard { |_e, _c| true } }
       end
@@ -118,7 +118,7 @@ describe "transition resolution" do
   it "stops evaluating once a guard passes, leaving later guards unrun" do
     ctx : TurnContext = TurnContext.new
     # Side-channel: this flag flips only if the second guard is evaluated. Because
-    # the first guard passes and evaluation stops (design section 6), it must stay
+    # the first guard passes and evaluation stops, it must stay
     # false.
     second_guard_ran : Bool = false
 
@@ -141,7 +141,7 @@ describe "transition resolution" do
 
     machine : FSM::Machine(TurnContext) = FSM::Machine(TurnContext).build("world") do |m|
       m.state("door") do |s|
-        s.on_event("open", "rattled") # no guard: always passes (design section 6)
+        s.on_event("open", "rattled") # no guard: always passes
       end
       m.state("rattled") { |s| }
     end
@@ -160,7 +160,7 @@ describe "transition resolution" do
   end
 
   it "lets a guardless transition permanently shadow a later guarded one for the same event" do
-    # The sharp edge (design section 6, section 13.2, D11): a guardless transition
+    # The sharp edge: a guardless transition
     # registered before a guarded one for the same event makes the later one
     # unreachable. Its guard never runs and its target is never selected. This is
     # documented rather than rejected; build-time detection is deferred.

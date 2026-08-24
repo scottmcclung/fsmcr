@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-# Construction is a machine-scoped builder (design section 4, D2):
+# Construction is a machine-scoped builder:
 #   Machine(T).build(id) { |m| m.state("id") { |s| ... } }
 # replacing the old array-of-states form (`Machine.create(id, states)`), which no
 # longer exists. `m.state` infers `T` from the enclosing builder, so `T` is named
@@ -8,9 +8,9 @@ require "./spec_helper"
 # At the end of the block the builder validates that every transition target names
 # an existing state, then seals every definition and transition.
 #
-# Duplicate-state-id detection (fsmcr-dy7): no two states share an id, so registering
+# Duplicate-state-id detection: no two states share an id, so registering
 # m.state("cave") twice raises DuplicateStateError rather than silently overwriting the
-# first definition (design section 4).
+# first definition.
 describe "Machine(T).build" do
   it "returns a Machine(T) carrying the given id and its states" do
     machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("worker") do |m|
@@ -45,8 +45,8 @@ describe "Machine(T).build" do
 
   it "raises DuplicateStateError when two states share an id, naming the duplicated id" do
     # No two states share an id: the second m.state("idle") raises rather than
-    # silently overwriting the first, whose transitions would otherwise be discarded
-    # (design section 4). The message names the duplicated id so the caller can find
+    # silently overwriting the first, whose transitions would otherwise be discarded.
+    # The message names the duplicated id so the caller can find
     # the offending registration.
     error : FSM::DuplicateStateError = expect_raises(FSM::DuplicateStateError) do
       FSM::Machine(FSM::Context).build("worker") do |m|
@@ -78,7 +78,7 @@ describe "Machine(T).build" do
   end
 
   it "raises at the duplicate m.state call rather than deferring to the end of the block" do
-    # Design section 4 says registering m.state("cave") twice raises, i.e. the raise
+    # Registering m.state("cave") twice raises, i.e. the raise
     # is the act of the second registration, not a deferred finish-time validation.
     # A later state block therefore never runs: if the duplicate raised, control left
     # the build block before reaching it, so the flag stays false. A finish-time check
@@ -138,7 +138,7 @@ describe "Machine(T).build" do
   it "does not treat state ids as shared across separate Machine.build calls" do
     # Each Machine.build call uses its own builder with its own id registry, so the
     # same state id may appear in two independent machines without either build
-    # raising DuplicateStateError (fsmcr-dy7).
+    # raising DuplicateStateError.
     first : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("a") do |m|
       m.state("idle") { |s| s.on_event("start", "idle") }
     end
@@ -168,8 +168,7 @@ describe "Machine(T).build" do
   end
 end
 
-# Service(T).interpret validates the initial state against the sealed machine
-# (design section 10.2, step 5).
+# Service(T).interpret validates the initial state against the sealed machine.
 describe "Service(T).interpret" do
   it "raises InvalidInitialStateError when the initial state is not in the machine" do
     machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("test_machine") do |m|

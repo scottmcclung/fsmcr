@@ -5,12 +5,12 @@
 require "./fsm/observer_firing"
 require "./fsm/*"
 
-# fsmcr is a general-purpose finite state machine library (design section 1). A
+# fsmcr is a general-purpose finite state machine library. A
 # machine is defined once by a machine-scoped builder, sealed, then interpreted. The
 # sealed definition is immutable and safe to share across interpreters and fibers.
 # Interpretation separates deciding from doing: a pure core computes an ordered list
 # of effects and runs none of them, and an interpreter (Service or AsyncService) runs
-# them (design section 1).
+# them.
 module FSM
   alias Any = Nil |
               Bool |

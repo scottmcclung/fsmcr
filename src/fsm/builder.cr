@@ -1,16 +1,16 @@
 module FSM
-  # The machine-scoped builder yielded by Machine(T).build (design section 4, D2).
+  # The machine-scoped builder yielded by Machine(T).build.
   #
   # `state` infers T from the enclosing builder, so T is named once per machine.
   # A partially-built StateDefinition never escapes the block as a loose local:
   # the builder registers it internally and seals it at the end of the block, which
-  # is what closes the window in which a caller could hold an unsealed state
-  # (design section 4). At the end of the block `finish` validates every transition
+  # is what closes the window in which a caller could hold an unsealed state.
+  # At the end of the block `finish` validates every transition
   # target, seals every definition, and returns the immutable machine.
   #
   # No two states share an id: registering a second state with an already-registered
   # id raises DuplicateStateError at that `state` call rather than silently overwriting
-  # the first definition and discarding its transitions (design section 4, fsmcr-dy7).
+  # the first definition and discarding its transitions.
   class Builder(T)
     @id : String
     @states : Hash(String, StateDefinition(T))
@@ -20,7 +20,7 @@ module FSM
     end
 
     # Register a state, yielding its definition so transitions and callbacks can be
-    # attached (design section 4). The definition is registered regardless of what
+    # attached. The definition is registered regardless of what
     # the block returns.
     # Raises DuplicateStateError if id was already registered by this builder.
     def state(id : String, &) : StateDefinition(T)
@@ -31,15 +31,14 @@ module FSM
       definition
     end
 
-    # Validate targets, seal, and return the immutable machine (design section 4,
-    # section 10.1 steps 2-4).
+    # Validate targets, seal, and return the immutable machine.
     protected def finish : Machine(T)
       validate_targets
       @states.each_value(&.seal)
       Machine(T).new(@id, @states)
     end
 
-    # Every transition target must name a state that exists (design section 4).
+    # Every transition target must name a state that exists.
     # Because this runs at build and sealing prevents post-build mutation, a
     # missing target can never surface at runtime.
     private def validate_targets : Nil

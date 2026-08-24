@@ -1,7 +1,7 @@
 require "./spec_helper"
 require "./support/plan_probe"
 
-# Self-transitions (design section 9.1, section 10.2 step 15, D7).
+# Self-transitions.
 #
 # A self-transition is EXTERNAL by default: it runs exit, then the transition
 # callback, then entry, exactly as a transition to any other state would. INTERNAL
@@ -40,7 +40,7 @@ describe "self-transitions" do
       m.state("cave") do |s|
         s.on_exit { |_e, c| c.say("exit") }
         s.on_entry { |_e, c| c.say("entry") }
-        # Internal is opt-in per transition (design section 9.1).
+        # Internal is opt-in per transition.
         s.on_event("look", "cave") { |t| t.internal.on { |_e, c| c.say("transition") } }
       end
     end

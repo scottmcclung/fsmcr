@@ -1,24 +1,21 @@
 require "./spec_helper"
 
-# The fiber-and-mailbox interpreter, AsyncService(T) (design section 8.2, section
-# 10.5, section 11; D6, D7, D19).
+# The fiber-and-mailbox interpreter, AsyncService(T).
 #
 # AsyncService is a SECOND interpreter beside Service, not a replacement. It
 # serializes by ownership: exactly one fiber ever executes the machine's code, and
-# other fibers reach it only by putting a message in the mailbox (design section
-# 12.2). `post` is fire-and-forget and returns immediately; `send` blocks the CALLING
-# fiber, not a thread, and reads the reply off a channel (design section 8.2). Both
-# plan on the owning fiber, which the concurrency contract requires (design section
-# 12.3).
+# other fibers reach it only by putting a message in the mailbox.
+# `post` is fire-and-forget and returns immediately; `send` blocks the CALLING
+# fiber, not a thread, and reads the reply off a channel. Both
+# plan on the owning fiber, which the concurrency contract requires.
 #
-# Two behaviors the design settles in section 11 are exercised here and documented at
-# their specs below: what an errored or stopped async service does with a new event
-# (D22), and what happens when an observer itself raises while handling a failed step
-# (D19, D23).
+# Two behaviors are exercised here and documented at
+# their specs below: what an errored or stopped async service does with a new event,
+# and what happens when an observer itself raises while handling a failed step.
 
 # A context whose callbacks record into a log and can drive the async service that
 # owns it. Holding the reference is how a callback posts a follow-up event from inside
-# a transition (design section 10.5 step 17): the callback receives (event, context),
+# a transition: the callback receives (event, context),
 # so the async service must be reachable through the context. The reference is set
 # after start, which is safe because callbacks run only once an event is processed,
 # well after construction.
@@ -56,7 +53,7 @@ describe "FSM::AsyncService" do
       service : FSM::AsyncService(AsyncServiceSteps) = FSM::AsyncService(AsyncServiceSteps).start(machine, initial: "idle", context: ctx)
 
       # The lifecycle condition is the interpreter's own health, separate from
-      # State#status (design section 8.2). A fresh async service is running, not
+      # State#status. A fresh async service is running, not
       # stopped, not errored.
       service.running?.should be_true
       service.stopped?.should be_false
@@ -67,7 +64,7 @@ describe "FSM::AsyncService" do
     end
 
     # start validates the initial state against the sealed machine, mirroring
-    # Service(T).interpret (design section 10.2, step 5). Without this a wrong id
+    # Service(T).interpret. Without this a wrong id
     # produces an interpreter that never advances.
     it "raises InvalidInitialStateError when the initial state is not in the machine" do
       ctx : AsyncServiceSteps = AsyncServiceSteps.new
@@ -84,7 +81,7 @@ describe "FSM::AsyncService" do
   end
 
   describe "send" do
-    it "returns the snapshot built for the step (design section 10.5 step 22)" do
+    it "returns the snapshot built for the step" do
       ctx : AsyncServiceSteps = AsyncServiceSteps.new
 
       machine : FSM::Machine(AsyncServiceSteps) = FSM::Machine(AsyncServiceSteps).build("world") do |m|
@@ -97,7 +94,7 @@ describe "FSM::AsyncService" do
       service : FSM::AsyncService(AsyncServiceSteps) = FSM::AsyncService(AsyncServiceSteps).start(machine, initial: "cave", context: ctx)
 
       # send runs the plan on the owning fiber and hands back the State snapshot the
-      # step produced: the new id and Success (design section 10.5 step 22).
+      # step produced: the new id and Success.
       result : FSM::State = service.send("north")
       result.id.should eq "clearing"
       result.status.should eq FSM::Status::Success
@@ -119,8 +116,8 @@ describe "FSM::AsyncService" do
 
       service : FSM::AsyncService(TurnContext) = FSM::AsyncService(TurnContext).start(machine, initial: "cave", context: ctx)
 
-      # A guard-blocked event is a successful transaction that moved nowhere (design
-      # section 3.3): Success, unchanged id.
+      # A guard-blocked event is a successful transaction that moved nowhere:
+      # Success, unchanged id.
       result : FSM::State = service.send("north")
       result.status.should eq FSM::Status::Success
       result.id.should eq "cave"
@@ -202,7 +199,7 @@ describe "FSM::AsyncService" do
     it "enqueues events and processes them in order; a later send flushes the queue" do
       # Three posts advance a chain in FIFO order. A trailing send sits behind the
       # posts in the same mailbox, so by the time its reply returns every post has
-      # already been processed (design section 10.5): the ordering is observable
+      # already been processed: the ordering is observable
       # without any sleep. on_transition records each committed state.
       ctx : AsyncServiceSteps = AsyncServiceSteps.new
       order : Array(String) = [] of String
@@ -233,12 +230,12 @@ describe "FSM::AsyncService" do
       service.stop
     end
 
-    it "posts from inside a callback, cascading on the same mailbox (design section 10.5 step 17)" do
+    it "posts from inside a callback, cascading on the same mailbox" do
       # A post from inside a callback pushes to the same mailbox, so the drain simply
-      # continues (design section 10.5 step 17). Entering "armed" posts "trip", which
+      # continues. Entering "armed" posts "trip", which
       # the machine handles as a further transition to "sprung". post-from-callback is
       # the safe direction from inside a callback; send-from-callback would deadlock
-      # the async service on itself (design section 8.2) and is asserted nowhere on
+      # the async service on itself and is asserted nowhere on
       # purpose.
       ctx : AsyncServiceLog = AsyncServiceLog.new
 
@@ -272,9 +269,9 @@ describe "FSM::AsyncService" do
     end
   end
 
-  describe "context isolation (D6)" do
+  describe "context isolation" do
     it "exposes no context accessor; reads go through send on the owning fiber" do
-      # Structural guarantee (design section 8.2, D6): AsyncService has no `context`
+      # Structural guarantee: AsyncService has no `context`
       # getter. A line such as `service.context` does not compile, so the guarantee
       # cannot be asserted at runtime; it is enforced by the API's absence and covered
       # here behaviorally. The only way to learn what the context said is to send an
@@ -298,7 +295,8 @@ describe "FSM::AsyncService" do
       blocked : FSM::State = service.send("north")
       blocked.id.should eq "cave"
 
-      # Mutating the retained reference is the caller's own doing (D6 does not stop a
+      # Mutating the retained reference is the caller's own doing (withholding the
+      # context accessor does not stop a
       # caller keeping the reference it passed to start); the next send re-consults it
       # on the owning fiber.
       ctx.rope_secured = true
@@ -309,7 +307,7 @@ describe "FSM::AsyncService" do
     end
   end
 
-  describe "error handling under send (design section 11)" do
+  describe "error handling under send" do
     it "returns a Failed snapshot as a value; no exception crosses the reply channel" do
       ctx : AsyncServiceSteps = AsyncServiceSteps.new
       boom : Exception = Exception.new("entry raised")
@@ -323,8 +321,8 @@ describe "FSM::AsyncService" do
 
       service : FSM::AsyncService(AsyncServiceSteps) = FSM::AsyncService(AsyncServiceSteps).start(machine, initial: "cave", context: ctx)
 
-      # send catches the exception and hands back a Failed snapshot; it does not raise
-      # (design section 11). The pointer did not move, so id is the unchanged state.
+      # send catches the exception and hands back a Failed snapshot; it does not raise.
+      # The pointer did not move, so id is the unchanged state.
       result : FSM::State = service.send("north")
       result.status.should eq FSM::Status::Failed
       result.error.should eq boom
@@ -333,7 +331,7 @@ describe "FSM::AsyncService" do
       service.stop
     end
 
-    it "stays running after a failed send; only post errors the async service (design section 11)" do
+    it "stays running after a failed send; only post errors the async service" do
       # A callback raising under send surfaces as a value, so the async service is not
       # poisoned: unlike post, send has a reply channel to carry the failure. The
       # async service keeps draining and a later send succeeds.
@@ -368,11 +366,11 @@ describe "FSM::AsyncService" do
     end
   end
 
-  describe "error handling under post (design section 11)" do
+  describe "error handling under post" do
     it "marks the async service errored, records the exception, and stops draining the mailbox" do
       # post has already returned by the time the callback runs, so there is no
       # snapshot to hand back. The async service catches the exception, marks itself
-      # errored, records it, and stops draining (design section 11). Events posted
+      # errored, records it, and stops draining. Events posted
       # after the poisoning one are never processed, so the second transition's
       # callback never runs and `steps` stays at 0.
       ctx : AsyncServiceSteps = AsyncServiceSteps.new
@@ -390,7 +388,7 @@ describe "FSM::AsyncService" do
       end
 
       # on_event_processed fires on the failed step and signals the test fiber, so no
-      # sleep is needed to know the poisoning step has been handled (D19).
+      # sleep is needed to know the poisoning step has been handled.
       service : FSM::AsyncService(AsyncServiceSteps) = FSM::AsyncService(AsyncServiceSteps).start(machine, initial: "cave", context: ctx) do |observers|
         observers.on_event_processed { |snapshot| processed.send(snapshot) }
       end
@@ -414,7 +412,7 @@ describe "FSM::AsyncService" do
       ctx.steps.should eq 0
     end
 
-    it "fires on_event_processed with the Failed snapshot but not on_transition (D19)" do
+    it "fires on_event_processed with the Failed snapshot but not on_transition" do
       ctx : AsyncServiceSteps = AsyncServiceSteps.new
       boom : Exception = Exception.new("post callback raised")
       processed : Channel(FSM::State) = Channel(FSM::State).new(1)
@@ -435,23 +433,22 @@ describe "FSM::AsyncService" do
       service.post("north")
 
       snapshot : FSM::State = processed.receive
-      # "after every step" includes the failed step (D19); "on change" excludes it,
+      # "after every step" includes the failed step; "on change" excludes it,
       # because no transition completed.
       snapshot.status.should eq FSM::Status::Failed
       snapshot.error.should eq boom
       transition_fired.should be_false
     end
 
-    it "keeps the first recorded exception when the observer itself raises on the failed step (D19)" do
-      # Per the design (section 11, D19): an observer that raises while
+    it "keeps the first recorded exception when the observer itself raises on the failed step" do
+      # An observer that raises while
       # handling a failed step does not overwrite the failure the snapshot already
       # carries. The first exception is the callback's, recorded before the observer
       # ran. The observer's own exception is discarded, matching how Service treats a
       # raising on_event_processed on a failed step: the recorded exception wins, and
       # the observer's exception must not become the async service's recorded error.
       # This keeps post's failure reporting single-sourced and mirrors the
-      # returning-path rule that the first exception is authoritative (design section
-      # 9).
+      # returning-path rule that the first exception is authoritative.
       ctx : AsyncServiceSteps = AsyncServiceSteps.new
       callback_error : Exception = Exception.new("post callback raised")
       observer_error : Exception = Exception.new("observer raised")
@@ -479,15 +476,15 @@ describe "FSM::AsyncService" do
       service.error.should eq callback_error
     end
 
-    it "poisons the async service when an observer raises on a non-failed step under post (design section 11, D23)" do
-      # Per the design (section 11, D23): an observer that raises on a
+    it "poisons the async service when an observer raises on a non-failed step under post" do
+      # An observer that raises on a
       # SUCCESSFUL step poisons the async service. An observer exception on a committed
       # step is an interpreter-level failure, not a transaction failure, so it poisons
       # under BOTH post and send. Under post there is no caller to receive it, so the
       # failure follows the no-return rule: "where nothing comes back, failure is in the
-      # interpreter" (design section 11). Letting it escape the owning fiber would kill
+      # interpreter". Letting it escape the owning fiber would kill
       # that fiber and silently stop the mailbox draining, the worst available failure
-      # mode (design section 11). So the async service records the observer's exception
+      # mode. So the async service records the observer's exception
       # as its error and stops draining, exactly as a raising post callback would. Under
       # send the same observer exception also poisons the async service, but the step
       # committed so the accurate snapshot is still returned as the value; the caller
@@ -527,7 +524,7 @@ describe "FSM::AsyncService" do
     end
   end
 
-  describe "guard raising (design section 10.2 step 12, section 11)" do
+  describe "guard raising" do
     it "returns a Failed snapshot carrying the guard's exception under send and stays usable" do
       # Guards run inside plan, which the owning fiber calls inside the same rescue as
       # the callbacks. A guard that raises therefore produces a Failed snapshot exactly
@@ -581,8 +578,8 @@ describe "FSM::AsyncService" do
 
     it "marks the async service errored and records the exception when a guard raises under post" do
       # A guard raising under post is a transaction failure with no reply channel, so
-      # it poisons the async service exactly like a raising post callback (design
-      # section 11). on_event_processed fires on the failed step and signals the test
+      # it poisons the async service exactly like a raising post callback.
+      # on_event_processed fires on the failed step and signals the test
       # behind a timeout, so a regression that hangs the owning fiber fails here rather
       # than blocking the suite.
       ctx : AsyncServiceSteps = AsyncServiceSteps.new
@@ -629,10 +626,10 @@ describe "FSM::AsyncService" do
     end
   end
 
-  describe "observer raising on a committed step (design section 9, section 11)" do
+  describe "observer raising on a committed step" do
     it "still fires on_event_processed and poisons under post when on_transition raises on a successful step" do
-      # An on_transition observer that raises must not skip on_event_processed: section
-      # 9 guarantees on_event_processed fires after every step. The step committed, so
+      # An on_transition observer that raises must not skip on_event_processed, which
+      # fires after every step. The step committed, so
       # the observer failure is interpreter-level and poisons the async service under
       # post. A following send is refused as a value, establishing happens-before with
       # the poisoning so the lifecycle assertions are not racy.
@@ -718,7 +715,7 @@ describe "FSM::AsyncService" do
     end
   end
 
-  describe "stop drains queued events (design section 8.2, section 10.5)" do
+  describe "stop drains queued events" do
     it "processes an event posted before stop before stop returns" do
       # StopMessage rides the same FIFO mailbox behind an earlier post, so the post is
       # fully processed before the owning fiber reaches the stop and acks it. stop is
@@ -761,7 +758,7 @@ describe "FSM::AsyncService" do
     end
   end
 
-  describe "observers on a successful transition (design section 9, D19)" do
+  describe "observers on a successful transition" do
     it "fires on_transition then on_event_processed with the new-state snapshot" do
       ctx : AsyncServiceSteps = AsyncServiceSteps.new
       order : Array(String) = [] of String
@@ -822,14 +819,14 @@ describe "FSM::AsyncService" do
     end
   end
 
-  describe "stop (design section 8.2)" do
+  describe "stop" do
     it "reports stopped and refuses further events after stop" do
-      # Per the design (section 8.2, section 11, D22): a stopped async
+      # A stopped async
       # service, like an errored one, accepts no further events. post is dropped
       # silently, because post has no reply channel and there is nothing to report on.
       # send returns a Failed snapshot rather than blocking forever on a fiber that has
       # stopped draining, following the returning-path rule that failure comes back as
-      # a value where a value comes back (design section 11). The concrete exception a
+      # a value where a value comes back. The concrete exception a
       # stopped-service send carries is left to the implementer; the contract asserted
       # here is Failed status, a non-nil error, and no processing.
       #
@@ -871,11 +868,11 @@ describe "FSM::AsyncService" do
     end
   end
 
-  describe "errored async service incoming events (design section 11, D22)" do
+  describe "errored async service incoming events" do
     it "drops a post silently and returns the recorded failure from a send" do
-      # Per the design (section 11, D22): an errored async service refuses
+      # An errored async service refuses
       # events, and the manner of refusal follows the return-shape rule that governs
-      # the whole library (design section 11): "where a value comes back, failure is in
+      # the whole library: "where a value comes back, failure is in
       # the value; where nothing comes back, failure is in the interpreter."
       #
       #   - post has no reply channel, so it is DROPPED SILENTLY. The interpreter has

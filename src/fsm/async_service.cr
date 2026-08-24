@@ -1,11 +1,11 @@
 module FSM
   # :nodoc:
   #
-  # One event handed to the owning fiber (design section 8.2, section 10.5). A post
+  # One event handed to the owning fiber. A post
   # carries no reply (`reply` is nil); a send carries a capacity-1 reply channel the
-  # owning fiber sends the step's State snapshot back on (design section 10.5 step 22).
+  # owning fiber sends the step's State snapshot back on.
   # Not generic over T: the event is a String and the reply is a State, which carries
-  # no context (design section 3.3).
+  # no context.
   private struct EventMessage
     getter event : String
     getter reply : Channel(State)?
@@ -16,7 +16,7 @@ module FSM
 
   # :nodoc:
   #
-  # A synchronous stop request (design section 8.2). It travels through the same
+  # A synchronous stop request. It travels through the same
   # mailbox as events, so events already queued ahead of it drain before the async
   # service stops. `ack` is signalled once the owning fiber has recorded the stop,
   # which is what makes #stop synchronous.
@@ -33,8 +33,7 @@ module FSM
   # :nodoc:
   #
   # An unbounded FIFO mailbox with one blocking consumer and many non-blocking
-  # producers (design section 8.2). `post` must return immediately (design section
-  # 8.2, section 10.7), so producers never block on a full buffer the way a fixed
+  # producers. `post` must return immediately, so producers never block on a full buffer the way a fixed
   # Channel would; the queue grows instead. The single owning fiber blocks in
   # `receive` when the queue is empty and a producer wakes it. `close` followed by
   # draining lets the owning fiber reject anything still queued at shutdown without a
@@ -97,7 +96,7 @@ module FSM
 
   # :nodoc:
   #
-  # The interpreter's own health, distinct from State#status (design section 8.2).
+  # The interpreter's own health, distinct from State#status.
   # State#status describes one transaction; this describes whether the owning fiber
   # is still draining the mailbox.
   private enum Lifecycle
@@ -106,33 +105,33 @@ module FSM
     Errored
   end
 
-  # The fiber-and-mailbox interpreter (design section 8.2, section 10.5, section 11).
+  # The fiber-and-mailbox interpreter.
   #
   # AsyncService(T) is a second interpreter beside Service(T), not a replacement. It
   # serializes by ownership: exactly one fiber ever executes the machine's code, and
-  # other fibers reach it only by putting a message in the mailbox (design section
-  # 12.2). This is the load-bearing difference from Service, which serializes by lock
-  # (design section 12.2). Section 12's three separable concerns land here as follows:
+  # other fibers reach it only by putting a message in the mailbox. This is the
+  # load-bearing difference from Service, which serializes by lock.
+  # The three separable concerns land here as follows:
   # the machine definition is immutable after build and safe to share (sealing); the
   # interpreter's own state advances atomically because only the owning fiber touches
-  # it; and nothing is guaranteed about T, which is the caller's responsibility
-  # (design section 12.3). Service arranges the second concern with a per-instance
+  # it; and nothing is guaranteed about T, which is the caller's responsibility.
+  # Service arranges the second concern with a per-instance
   # mutex over interpreter state; AsyncService arranges it by fiber ownership instead.
   #
-  # Planning happens on the owning fiber. This is the purity contract of section 12.3:
+  # Planning happens on the owning fiber. This is the purity contract:
   # a guard reads context T while planning, and a guard on the owning fiber never sees
   # a T some other fiber is mutating mid-plan, because the owning fiber is the only one
   # that ever runs the machine's code. Purity is what the library asks of a guard;
   # ownership is what the interpreter supplies.
   #
   # `post` is fire-and-forget and returns immediately; `send` blocks the CALLING
-  # fiber, not a thread, and reads the reply off a channel (design section 8.2). The
+  # fiber, not a thread, and reads the reply off a channel. The
   # rule that comes with that: post from inside a callback, send from outside. A send
   # from inside a callback of the same instance deadlocks, because it would be waiting
-  # on itself (design section 8.2); post from inside a callback remains safe. See
+  # on itself; post from inside a callback remains safe. See
   # #send.
   #
-  # D6: AsyncService exposes no `context` getter. Reads go through `send` on the
+  # AsyncService exposes no `context` getter. Reads go through `send` on the
   # owning fiber, which is the one place structural enforcement of context isolation
   # is available. That absence is deliberate and is why no such method appears below.
   class AsyncService(T)
@@ -140,17 +139,17 @@ module FSM
 
     @machine : Machine(T)
     @context : T
-    # The interpreter's only position field, mutated only by the owning fiber (D18).
+    # The interpreter's only position field, mutated only by the owning fiber.
     @state : State
     @on_transition : (State ->)?
     @on_event_processed : (State ->)?
 
     # The unbounded inbox external fibers push to and the owning fiber drains.
     @mailbox : Mailbox = Mailbox.new
-    # Events a callback posts while running on the owning fiber (design section 10.5
-    # step 17). They are drained within the current step, ahead of the next external
+    # Events a callback posts while running on the owning fiber. They are drained within
+    # the current step, ahead of the next external
     # message, so a cascade settles before an event queued from outside is handled,
-    # mirroring Service's step-21 drain (design section 10.3). Touched only by the
+    # mirroring Service's drain of pending events. Touched only by the
     # owning fiber, so it needs no lock.
     @cascade : Deque(String) = Deque(String).new
 
@@ -166,8 +165,8 @@ module FSM
     @fiber : Fiber
 
     # Constructed only through `start`. Protected so the fiber-ownership setup cannot
-    # be bypassed by a direct AsyncService(T).new call from outside the FSM namespace
-    # (design section 8.2). The owning fiber starts last, once every field it reads is
+    # be bypassed by a direct AsyncService(T).new call from outside the FSM namespace.
+    # The owning fiber starts last, once every field it reads is
     # set, so it never observes a half-built async service even under real parallelism.
     # (T = Nil needs no guard here: Machine(Nil).build already fails at compile time
     # upstream, so no AsyncService(Nil) can be constructed to reach this point.)
@@ -176,16 +175,16 @@ module FSM
     end
 
     # Start an async service interpreting the machine from an initial state,
-    # registering no observers (design section 8.2, section 10.2). The name pairs with
+    # registering no observers. The name pairs with
     # `stop` and the lifecycle predicates and avoids colliding with Crystal's builtin
-    # fiber `spawn` (D21). The owning fiber and mailbox are private; the caller drives
+    # fiber `spawn`. The owning fiber and mailbox are private; the caller drives
     # the async service only through post, send, and stop.
     def self.start(machine : Machine(T), initial : String, context : T) : AsyncService(T)
       new(machine, context, build_initial_state(machine, initial))
     end
 
-    # Start an async service and register observers through a builder block (design
-    # section 8.2, section 9, D19). The block receives an ObserverRegistrar, mirroring
+    # Start an async service and register observers through a builder block. The block
+    # receives an ObserverRegistrar, mirroring
     # Service.interpret: on_transition and on_event_processed handlers are copied
     # once into the async service and the registrar is sealed before start returns.
     def self.start(machine : Machine(T), initial : String, context : T, & : ObserverRegistrar ->) : AsyncService(T)
@@ -203,8 +202,8 @@ module FSM
     end
 
     # Validate the initial state against the sealed machine and build the initial
-    # snapshot both start overloads start from: the initial id, Success, and no error
-    # (design section 10.2, steps 5-6). Raises InvalidInitialStateError when the machine
+    # snapshot both start overloads start from: the initial id, Success, and no error.
+    # Raises InvalidInitialStateError when the machine
     # has no state with that id, mirroring Service.build_initial_state. Without this
     # guard a wrong id yields an interpreter whose apply never finds a definition and so
     # never advances, holding Success forever.
@@ -213,18 +212,17 @@ module FSM
       State.new(id: initial, status: Status::Success, error: nil)
     end
 
-    # Enqueue an event to the mailbox and return immediately (design section 8.2,
-    # section 10.5 step 22). Fire-and-forget: the work happens on the owning fiber.
+    # Enqueue an event to the mailbox and return immediately. Fire-and-forget: the work
+    # happens on the owning fiber.
     #
-    # A post from inside a callback is the safe direction (design section 8.2): it is
+    # A post from inside a callback is the safe direction: it is
     # detected as running on the owning fiber and queued as a cascade, drained within
     # the current step. A post from any other fiber goes to the mailbox.
     #
-    # A callback that raises under post poisons the async service (design section 11):
+    # A callback that raises under post poisons the async service:
     # post has already returned, so there is no snapshot to hand back and the failure
     # is recorded in the interpreter instead. A post into a stopped or errored async
-    # service is dropped silently, because there is no return value to carry a refusal
-    # (design section 11, D22).
+    # service is dropped silently, because there is no return value to carry a refusal.
     def post(event : String) : Nil
       if Fiber.current == @fiber
         @cascade.push(event)
@@ -239,20 +237,20 @@ module FSM
     end
 
     # Enqueue an event and block the CALLING fiber until the owning fiber replies with
-    # the State snapshot built for the step (design section 8.2, section 10.5 step 22,
-    # section 11). A callback that raises under send yields a Failed snapshot returned
+    # the State snapshot built for the step. A callback that raises under send yields a
+    # Failed snapshot returned
     # as a value; no exception crosses the reply channel.
     #
     # Send from outside a callback only. A send from inside a callback of the same
     # instance deadlocks: the callback runs on the owning fiber, and the reply it waits
-    # on can only be produced by that same owning fiber, so it waits on itself forever
-    # (design section 8.2). From inside a callback, post instead. A cross-fiber send made
+    # on can only be produced by that same owning fiber, so it waits on itself forever.
+    # From inside a callback, post instead. A cross-fiber send made
     # while holding a context lock the owning fiber's callback wants is the same deadlock
     # seen through that lock, since the caller blocks on the reply while the callback
-    # blocks on the lock (design section 12.7).
+    # blocks on the lock.
     #
     # A send into a stopped or errored async service short-circuits before touching
-    # the mailbox and returns a Failed snapshot as a value (design section 11): the
+    # the mailbox and returns a Failed snapshot as a value: the
     # owning fiber is no longer draining, so enqueuing and waiting for a reply would
     # deadlock. An errored async service returns the recorded poisoning exception; a
     # stopped one returns a StoppedError.
@@ -268,7 +266,7 @@ module FSM
       reply.receive
     end
 
-    # Stop the async service and return once it has stopped (design section 8.2).
+    # Stop the async service and return once it has stopped.
     # Synchronous: `stopped?` is deterministically true after this returns. The stop
     # request travels through the mailbox behind any events already queued, so those
     # events drain before it stops; nothing queued after the stop is processed. On an
@@ -284,34 +282,34 @@ module FSM
       ack.receive
     end
 
-    # Whether the owning fiber is still draining the mailbox (design section 8.2).
+    # Whether the owning fiber is still draining the mailbox.
     # A separate concept from State#status, which describes one transaction.
     def running? : Bool
       @lifecycle_mutex.synchronize { @lifecycle.running? }
     end
 
-    # Whether the async service was stopped through #stop (design section 8.2).
+    # Whether the async service was stopped through #stop.
     def stopped? : Bool
       @lifecycle_mutex.synchronize { @lifecycle.stopped? }
     end
 
-    # Whether a callback raised under post and poisoned the async service (design
-    # section 8.2, section 11). An errored async service has stopped draining its
+    # Whether a callback raised under post and poisoned the async service. An errored
+    # async service has stopped draining its
     # mailbox.
     def errored? : Bool
       @lifecycle_mutex.synchronize { @lifecycle.errored? }
     end
 
-    # The exception that errored the async service, or nil when it has not errored
-    # (design section 11). This is the exception a callback raised under post,
+    # The exception that errored the async service, or nil when it has not errored.
+    # This is the exception a callback raised under post,
     # recorded because post has no return value to carry the failure back.
     def error : Exception?
       @lifecycle_mutex.synchronize { @error }
     end
 
-    # The owning fiber's loop (design section 10.5). It drains the mailbox one message
+    # The owning fiber's loop. It drains the mailbox one message
     # at a time; being the only fiber that runs the machine's code is what serializes
-    # the interpreter (design section 12.2). It exits on a stop request or when a post
+    # the interpreter. It exits on a stop request or when a post
     # poisons the async service, then rejects anything still queued so no waiting
     # caller hangs.
     private def run : Nil
@@ -331,17 +329,17 @@ module FSM
       shutdown
     end
 
-    # Process one external message, then drain any cascades it queued (design section
-    # 10.5 step 17, section 10.3 step 21). Returns whether the owning fiber should keep
+    # Process one external message, then drain any cascades it queued. Returns whether
+    # the owning fiber should keep
     # draining; false once a post has poisoned the async service.
     private def step(message : EventMessage) : Bool
       return false unless process_event(message.event, message.reply)
       drain_cascades
     end
 
-    # Drain cascade events queued by callbacks on the owning fiber (design section
-    # 10.5 step 17). Each is a post, so a failure among them poisons the async service
-    # and stops the drain, matching a top-level post (design section 11).
+    # Drain cascade events queued by callbacks on the owning fiber. Each is a post, so a
+    # failure among them poisons the async service
+    # and stops the drain, matching a top-level post.
     private def drain_cascades : Bool
       while event = @cascade.shift?
         unless process_event(event, nil)
@@ -352,18 +350,17 @@ module FSM
       true
     end
 
-    # Plan, apply, and fire observers for one event, then reply if it was a send
-    # (design section 10.3 steps 8-22, section 10.5). Returns whether the owning fiber
+    # Plan, apply, and fire observers for one event, then reply if it was a send.
+    # Returns whether the owning fiber
     # should keep draining.
     #
     # Two failure shapes are handled here. A transaction failure (a guard or callback
     # raised, so the snapshot is Failed) under a no-reply event (post or cascade) is
     # poisoning, so the async service is marked errored BEFORE on_event_processed
     # fires: that observer can signal a waiting fiber, and the fiber must never observe
-    # the async service as still running after the poisoning step (design section 11).
+    # the async service as still running after the poisoning step.
     # The same transaction failure under send is NOT poisoning; its Failed snapshot
-    # returns as a value on the reply channel and the async service keeps draining
-    # (design section 11).
+    # returns as a value on the reply channel and the async service keeps draining.
     #
     # An observer failure is different. When an observer raises on a committed
     # (successful or blocked) step it is an interpreter-level failure, not a
@@ -372,7 +369,7 @@ module FSM
     # returned as the value and no exception crosses the reply channel; the caller sees
     # the poisoning through errored?/error. mark_errored runs before the reply so the
     # caller cannot observe the async service as still running after receiving the
-    # snapshot (design section 11, section 9).
+    # snapshot.
     private def process_event(event : String, reply : Channel(State)?) : Bool
       snapshot : State
       transitioned : Bool
@@ -380,9 +377,9 @@ module FSM
 
       if reply.nil? && snapshot.status.failed?
         # A post or cascade transaction failed: poison first, then fire the after-
-        # every-step observer (design section 9, D19). on_transition does not fire on a
+        # every-step observer. on_transition does not fire on a
         # failed step, and an exception the observer itself raises is discarded so the
-        # first recorded exception stays authoritative (design section 9).
+        # first recorded exception stays authoritative.
         mark_errored(snapshot.error)
         fire_observers(snapshot, transitioned)
         return false
@@ -391,7 +388,7 @@ module FSM
       observer_error : Exception? = fire_observers(snapshot, transitioned)
       if observer_error
         # An observer raised on a committed step. Poison before replying so the caller
-        # observes the errored condition once the reply arrives (design section 11).
+        # observes the errored condition once the reply arrives.
         mark_errored(observer_error)
       end
       reply.send(snapshot) if reply
@@ -403,8 +400,8 @@ module FSM
       true
     end
 
-    # Run the plan's actions and commit, or record a failure (design section 10.3
-    # steps 8-19). Runs only on the owning fiber, so @state needs no lock. Returns the
+    # Run the plan's actions and commit, or record a failure. Runs only on the owning
+    # fiber, so @state needs no lock. Returns the
     # committed snapshot and whether a transition actually completed.
     private def apply(event : String) : {State, Bool}
       definition : StateDefinition(T)? = @machine.state_by_id(@state.id)
@@ -415,13 +412,13 @@ module FSM
 
       transitioned : Bool = false
       begin
-        # Guards run inside plan (design section 10.2 step 12), so planning is inside
+        # Guards run inside plan, so planning is inside
         # the same rescue as the callbacks. A guard that raises produces a Failed
-        # snapshot exactly like a raising callback, and the commit is never reached
-        # (design section 11). If plan were called outside this rescue, a raising
+        # snapshot exactly like a raising callback, and the commit is never reached.
+        # If plan were called outside this rescue, a raising
         # guard would escape the owning fiber, kill it, and hang every waiting caller.
         # Widening the rescue over plan is deliberate. Guards are user code that runs
-        # inside plan, and per design section 11 the library does not distinguish a
+        # inside plan, and the library does not distinguish a
         # raising guard from a library defect inside plan: both surface as a Failed
         # snapshot on the returning path.
         plan : Plan(T) = @machine.plan(definition, event, @context)
@@ -430,14 +427,14 @@ module FSM
         transitioned = plan.outcome.is_a?(TransitionFound)
       rescue ex
         # A guard or callback raised, so the commit is never reached and the state
-        # pointer stays where it was (design section 11).
+        # pointer stays where it was.
         @state = State.new(id: @state.id, status: Status::Failed, error: ex)
       end
 
       {@state, transitioned}
     end
 
-    # Close the mailbox and reject anything still queued (design section 8.2). A
+    # Close the mailbox and reject anything still queued. A
     # closed mailbox makes later posts and sends give up instead of waiting, and any
     # message already buffered is rejected here so its sender never hangs.
     private def shutdown : Nil
@@ -460,10 +457,10 @@ module FSM
       end
     end
 
-    # The Failed snapshot a send receives when the async service is no longer running
-    # (design section 11). An errored async service reports the recorded poisoning
+    # The Failed snapshot a send receives when the async service is no longer running.
+    # An errored async service reports the recorded poisoning
     # exception; a stopped one reports a StoppedError, since a clean stop has no
-    # exception of its own and a Failed snapshot must carry one (design section 3.3).
+    # exception of its own and a Failed snapshot must carry one.
     # @state is read under the lifecycle lock for visibility of the owning fiber's last
     # commit; the async service is no longer running, so no concurrent write to @state
     # can occur.

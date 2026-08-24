@@ -1,5 +1,5 @@
 module FSM
-  # The outcome axis of a runtime snapshot (design section 3.3, D17).
+  # The outcome axis of a runtime snapshot.
   #
   # Status describes what happened to the transaction the caller initiated, not
   # the condition of an interpreter:

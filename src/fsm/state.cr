@@ -1,5 +1,5 @@
 module FSM
-  # The runtime snapshot an interpreter returns (design section 3.3, D13, D17).
+  # The runtime snapshot an interpreter returns.
   #
   # State reports the outcome of one transaction, not the condition of an
   # interpreter. By the time a snapshot exists the step is over, so there is no
@@ -7,12 +7,12 @@ module FSM
   # transaction committed, and `error` holds the exception on a failed step.
   #
   # Construction must maintain the invariant that Failed carries an exception and
-  # Success does not (design section 3.3). The types do not enforce it.
+  # Success does not. The types do not enforce it.
   #
   # State is the immutable value read constantly in consumer code, so it holds the
-  # short name; the definition carries the longer StateDefinition (design section
-  # 3.3). Nothing in a snapshot points back into the machine definition, so it is
-  # safe to return, compare, and cache.
+  # short name; the definition carries the longer StateDefinition. Nothing in a
+  # snapshot points back into the machine definition, so it is safe to return,
+  # compare, and cache.
   struct State
     getter id : String
     getter status : Status

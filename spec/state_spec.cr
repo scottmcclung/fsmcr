@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-# Transition(T) is a class (design section 5, D16). Its mutable surface is exactly
+# Transition(T) is a class. Its mutable surface is exactly
 # `on` and `guard`; `event` and `target` are set at construction and never change.
 # Because it is a class, the builder mutates one shared object rather than a copy,
 # so a guard or callback registered on the yielded transition during build is the

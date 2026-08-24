@@ -1,11 +1,11 @@
 require "./spec_helper"
 require "wait_group"
 
-# Service(T) is the synchronous interpreter (design sections 8.1 and 10.2). These
+# Service(T) is the synchronous interpreter. These
 # specs build a machine with `Machine(T).build` and run it with
 # `Service(T).interpret`, exercising the interpreter's behavioral surface.
 #
-# Note (design section 3.3, D18): `current_state` returns the cached `State`
+# Note: `current_state` returns the cached `State`
 # snapshot, so these specs read the id off it with `current_state.id`, and
 # `matches?` compares against that id. The `on_transition` observer payload is
 # settled elsewhere, so these specs only assert that it fires, never on its
@@ -207,8 +207,8 @@ describe FSM::Service do
 
       service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "state0", FSM::Context.new)
 
-      # spec_helper resizes the default execution context to more than one worker
-      # (fsmcr-9ct), so these 100 fibers now run under genuine parallelism and
+      # spec_helper resizes the default execution context to more than one worker,
+      # so these 100 fibers now run under genuine parallelism and
       # contend on Service#@transition_mutex rather than running one at a time.
       # This verifies the spawn/WaitGroup fiber lifecycle and 100 concurrent send
       # calls completing without raising or hanging. The purpose-built detectors

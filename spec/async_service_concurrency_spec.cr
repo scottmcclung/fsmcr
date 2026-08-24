@@ -1,18 +1,17 @@
 require "./spec_helper"
 require "wait_group"
 
-# Serialization by fiber ownership under real parallel contention (design section
-# 8.2, section 12.2; fsmcr-9ct, fsmcr-bfn.7).
+# Serialization by fiber ownership under real parallel contention.
 #
 # spec_helper resizes the default execution context to more than one worker, so the
 # fibers spawned below run on separate worker threads at the same time. AsyncService
 # serializes differently from Service: not by a lock many fibers queue on, but by
-# ownership: exactly one fiber ever executes the machine's code (design section
-# 12.2). Many fibers post and send concurrently; the owning fiber drains the mailbox
+# ownership: exactly one fiber ever executes the machine's code.
+# Many fibers post and send concurrently; the owning fiber drains the mailbox
 # one message at a time.
 #
 # The detector below is built to fail if that ownership were bypassed, in the spirit
-# of the Service contention specs (fsmcr-9ct). Its counter has no lock of its own and
+# of the Service contention specs. Its counter has no lock of its own and
 # its increment is a read-yield-write, so the update window spans a full scheduler
 # handoff. Under correct ownership the read-yield-write runs only on the OWNING fiber;
 # the yield hands the slot to other fibers, but those fibers only enqueue messages,
@@ -21,7 +20,7 @@ require "wait_group"
 # the increment at once, the yield would interleave two read-modify-write cycles, and
 # increments would be clobbered, so the final count would fall short. FSM::Context is
 # avoided on purpose: its internal lock would serialize the field access and mask a
-# bypassed ownership (design section 12.5).
+# bypassed ownership.
 
 # A context whose counter has no lock of its own; the only thing that can serialize
 # concurrent increments is the async service's single owning fiber. The
@@ -41,7 +40,7 @@ describe "FSM::AsyncService under real parallel contention" do
     ctx : AsyncServiceRacyCounter = AsyncServiceRacyCounter.new
 
     # A self-transition on "tick" keeps the machine in "counting" and runs the
-    # transition callback once per event (design section 9.1, external default).
+    # transition callback once per event (external default).
     machine : FSM::Machine(AsyncServiceRacyCounter) = FSM::Machine(AsyncServiceRacyCounter).build("counter") do |m|
       m.state("counting") do |s|
         s.on_event("tick", "counting") do |t|
@@ -75,8 +74,8 @@ describe "FSM::AsyncService under real parallel contention" do
     wait_group.wait
 
     # Every post is now enqueued. A trailing send sits behind all of them in the same
-    # mailbox, so its reply returns only once the whole backlog has drained (design
-    # section 10.5). "flush" is unregistered in "counting", so it moves nowhere and
+    # mailbox, so its reply returns only once the whole backlog has drained.
+    # "flush" is unregistered in "counting", so it moves nowhere and
     # increments nothing; it exists only to establish that the drain completed.
     flush : FSM::State = service.send("flush")
     flush.id.should eq "counting"
