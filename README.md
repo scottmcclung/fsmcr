@@ -38,14 +38,14 @@ Add the dependency to your `shard.yml`:
 
 ```yaml
 dependencies:
-  fsm:
+  fsmcr:
     github: scottmcclung/fsmcr
 ```
 
 Then require it:
 
 ```crystal
-require "fsm"
+require "fsmcr"
 ```
 
 This requires Crystal >= 1.21.0, the first release with `Fiber::ExecutionContext` on by
@@ -54,7 +54,7 @@ default, which `AsyncService` depends on. `shard.yml` enforces it.
 ## Quick start
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 machine = FSM::Machine(FSM::Context).build("worker") do |m|
   m.state("idle")    { |s| s.on_event("start", "running") }
@@ -83,7 +83,7 @@ to every guard and callback directly, so a guard reads `ctx.rope_secured` on a r
 typed object rather than pulling a primitive out of a hash.
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 class Player
   property has_key : Bool
@@ -118,7 +118,7 @@ hash-behind-a-mutex. Every method holds the mutex for the whole operation, so a
 shared context gets per-operation atomicity without you writing any locking.
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 ctx = FSM::Context.new
 ctx.set("count", 0)
@@ -182,7 +182,7 @@ Inside the build block, `m.state` registers a state and yields its definition. O
 definition you register transitions and callbacks.
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 class Room
   getter log : Array(String)
@@ -230,7 +230,7 @@ all of them succeed does the interpreter commit the new state.
 A single event can have several transitions on one state, distinguished by guards.
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 class Hero
   property has_key : Bool
@@ -271,7 +271,7 @@ callback, and `on_entry`, exactly like a move to any other state. Mark a transit
 `internal` to suppress exit and entry and run only the transition callback.
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 class Room
   getter log : Array(String)
@@ -329,7 +329,7 @@ than as a raise. An observer's own exception is the one path where `send` still 
 see the observers section.
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 class Ctx
 end
@@ -364,7 +364,7 @@ Two state-level handlers cover the events that do not transition:
   all. It is state-wide: one handler catches every unregistered event.
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 machine = FSM::Machine(FSM::Context).build("cave") do |m|
   m.state("cave") do |s|
@@ -398,7 +398,7 @@ handlers are copied into the interpreter and the registrar is sealed before `int
 returns, so a live interpreter has no observer setter.
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 machine = FSM::Machine(FSM::Context).build("m") do |m|
   m.state("idle")    { |s| s.on_event("start", "running") }
@@ -445,7 +445,7 @@ code; other fibers reach it by putting a message in the mailbox. It exposes `pos
 `send`, and `stop`.
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 class Ctx
 end
@@ -481,7 +481,7 @@ waiting on itself. From inside a callback, use `post` instead: it queues onto th
 mailbox and drains after the current step commits.
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 class TrapCtx
   property service : FSM::AsyncService(TrapCtx)? = nil
@@ -519,7 +519,7 @@ Build and interpret raise for the following:
   state in the machine.
 
 ```crystal
-require "fsm"
+require "fsmcr"
 
 # MissingTargetStateError: a transition names a state that does not exist.
 begin

@@ -24,7 +24,7 @@ module FSM
     # machine.
     def self.build(id : String, &) : Machine(T)
       {% if T == Nil %}
-        {% raise "Machine(Nil) is unsupported: T = Nil has no context object. Use FSM::Context as T for a contextless machine (design section 3.1, D5)." %}
+        {% raise "Machine(Nil) is unsupported: T = Nil has no context object. Use FSM::Context as T for a contextless machine." %}
       {% end %}
       builder : Builder(T) = Builder(T).new(id)
       yield builder

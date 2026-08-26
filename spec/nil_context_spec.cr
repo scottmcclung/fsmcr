@@ -14,7 +14,7 @@ describe "Machine(Nil)" do
     # this spec directory and requires the source with a relative path, so the
     # compile fails on the Machine(Nil) rejection rather than on a missing require.
     program : String = <<-CRYSTAL
-      require "../src/fsm"
+      require "../src/fsmcr"
       FSM::Machine(Nil).build("nil-context") { |m| }
       CRYSTAL
 
@@ -32,5 +32,8 @@ describe "Machine(Nil)" do
 
     status.success?.should be_false
     output.to_s.should contain "FSM::Context"
+    # The diagnostic reaches consumers who cannot read the project's private design
+    # notes, so it must not cite them.
+    output.to_s.should_not contain "design section"
   end
 end

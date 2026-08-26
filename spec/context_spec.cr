@@ -190,7 +190,7 @@ describe FSM::Context do
     end
 
     it "returns nil for a stored nil, the same value it returns for an absent key" do
-      # The wrinkle to pin explicitly. FSM::Any INCLUDES Nil (src/fsm.cr), so a key whose
+      # The wrinkle to pin explicitly. FSM::Any INCLUDES Nil (src/fsmcr.cr), so a key whose
       # stored value is nil and a key that was never set both come back nil from get?.
       # get? alone cannot tell the two apart; has_key? is the disambiguator, pinned in
       # the pairing spec below.

@@ -1,8 +1,8 @@
-require "../src/fsm"
+require "../src/fsmcr"
 
-# A stop-light machine, built once and then interpreted (design section 4,
-# section 8.1). T is FSM::Context, the hash-and-mutex bucket the library ships
-# for a caller with no domain object of its own (design section 3.1, D5).
+# A stop-light machine, built once and then interpreted. T is FSM::Context, the
+# hash-and-mutex bucket the library ships for a caller with no domain object of
+# its own.
 machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("stop_light") do |m|
   m.state("red") do |s|
     s.on_entry { |_event, _ctx| puts "Entry: red" }
@@ -29,22 +29,21 @@ machine : FSM::Machine(FSM::Context) = FSM::Machine(FSM::Context).build("stop_li
   end
 end
 
-# Interpret the sealed machine from an initial state (design section 8.1,
-# section 10.2). The machine is immutable and shareable; the service holds this
-# run's current state and context. Observers are registered through the builder
-# block, which receives an ObserverRegistrar and seals it before interpret
-# returns, so the live service's observers cannot be rewritten (design section 9).
+# Interpret the sealed machine from an initial state. The machine is immutable
+# and shareable; the service holds this run's current state and context.
+# Observers are registered through the builder block, which receives an
+# ObserverRegistrar and seals it before interpret returns, so the live service's
+# observers cannot be rewritten.
 context : FSM::Context = FSM::Context.new
 service : FSM::Service(FSM::Context) = FSM::Service(FSM::Context).interpret(machine, "red", context) do |observers|
-  # An observer fired only when a transition actually occurred (design section 9).
+  # An observer fired only when a transition actually occurred.
   observers.on_transition { |state| puts "State changed to: #{state.id}" }
 end
 
 puts "matches?(\"red\"): #{service.matches?("red")}"
 puts "current_state: #{service.current_state}"
 
-# Each send blocks, applies the actions, and returns the resulting snapshot
-# (design section 10.3).
+# Each send blocks, applies the actions, and returns the resulting snapshot.
 puts "send(\"change\").id => #{service.send("change").id}" # red -> green
 puts "send(\"change\").id => #{service.send("change").id}" # green -> yellow
 puts "send(\"change\").id => #{service.send("change").id}" # yellow -> red

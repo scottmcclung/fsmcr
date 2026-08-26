@@ -1,5 +1,5 @@
 require "spec"
-require "../src/fsm"
+require "../src/fsmcr"
 
 # Enable real parallelism for the whole spec suite. Crystal's default execution
 # context is Fiber::ExecutionContext::Parallel

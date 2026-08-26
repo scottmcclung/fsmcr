@@ -191,7 +191,7 @@ end
 describe "plan visibility" do
   it "is not callable from outside the FSM namespace" do
     program : String = <<-CRYSTAL
-      require "../src/fsm"
+      require "../src/fsmcr"
       machine = FSM::Machine(FSM::Context).build("m") do |mb|
         mb.state("a") { |s| s.on_event("go", "a") }
       end
